@@ -42,7 +42,7 @@ export default function HomeScreen() {
       shouldSavePaymentMethod: boolean,
       intentCreationCallback: (params: IntentCreationCallbackParams) => void
     ) => {
-      console.log("handleConfirm called with token:", confirmationToken.id);
+      console.log("confirmationToken --- :", confirmationToken);
       console.log("shouldSavePaymentMethod:", shouldSavePaymentMethod);
       console.log(
         "intentCreationCallback type:",
@@ -51,7 +51,7 @@ export default function HomeScreen() {
 
       try {
         // Make a request to your own server and receive a client secret or an error.
-        const response = await fetch(`${API_URL}/create-payment-intent`, {
+        const response = await fetch(`${API_URL}/create-intent`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -60,6 +60,9 @@ export default function HomeScreen() {
             confirmation_token_id: confirmationToken.id,
             amount: moneyAmount,
             currency: "usd",
+            setup_future_usage: shouldSavePaymentMethod
+              ? "off_session"
+              : undefined,
           }),
         });
 
@@ -93,7 +96,7 @@ export default function HomeScreen() {
         });
       }
     },
-    []
+    [customerId]
   );
 
   const initialize = useCallback(() => {
@@ -132,8 +135,11 @@ export default function HomeScreen() {
     const setupCustomer = async () => {
       const session = await createCustomerSession();
       if (session) {
+        console.log("✅ Customer session created:", session.customer);
         setCustomerId(session.customer);
         setCustomerSessionClientSecret(session.customerSessionClientSecret);
+      } else {
+        console.error("❌ Failed to create customer session");
       }
     };
     setupCustomer();
@@ -141,7 +147,10 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (customerId && customerSessionClientSecret) {
-      initialize();
+      console.log("🔧 Initializing payment element with customer:", customerId);
+      setTimeout(() => {
+        initialize();
+      }, 100);
     }
   }, [initialize, customerId, customerSessionClientSecret]);
 
@@ -190,6 +199,12 @@ export default function HomeScreen() {
     !customerId ||
     !customerSessionClientSecret
   ) {
+    console.log("⏳ Waiting for initialization...", {
+      intentConfig: !!intentConfig,
+      elementConfig: !!elementConfig,
+      customerId: !!customerId,
+      customerSessionClientSecret: !!customerSessionClientSecret,
+    });
     return (
       <ParallaxScrollView
         headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}

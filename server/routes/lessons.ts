@@ -176,16 +176,27 @@ router.post("/refund-lesson", async (req: Request, res: Response) => {
 
 // Create Payment Intent endpoint
 router.post("/create-payment-intent", async (req, res) => {
-  console.log("🚀 ~ req:", req);
+  console.log("🚀 ~ create-payment-intent req.body:", req.body);
   try {
     // Extract details from request body
-    const { amount, currency = "usd" } = req.body;
+    const {
+      confirmation_token_id,
+      amount,
+      currency = "usd",
+      customer_id,
+      setup_future_usage,
+    } = req.body;
 
     // Create a PaymentIntent
     const paymentIntent = await stripeSdk.paymentIntents.create({
       amount,
       currency,
+      confirmation_token: confirmation_token_id,
+      confirm: true,
       automatic_payment_methods: { enabled: true },
+      ...(customer_id && { customer: customer_id }),
+      ...(setup_future_usage && { setup_future_usage }),
+      return_url: "com.nellis.stripe://stripe-redirect",
     });
 
     // Send client secret to client
@@ -193,6 +204,7 @@ router.post("/create-payment-intent", async (req, res) => {
       clientSecret: paymentIntent.client_secret,
     });
   } catch (error: any) {
+    console.error("Error creating payment intent:", error);
     res.status(400).json({ error: { message: error.message } });
   }
 });
@@ -201,19 +213,137 @@ router.post("/create-intent", async (req, res) => {
   const customer_id = "cus_TUmiUmrxCQZ6hr";
 
   try {
-    var args = {
-      amount: 1099,
-      currency: "usd",
-      // In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
-      automatic_payment_methods: { enabled: true },
-      client: customer_id,
+    const {
+      confirmation_token_id,
+      amount = 1099,
+      currency = "usd",
+      setup_future_usage,
+    } = req.body;
+
+    console.log("🚀 ~ create-intent body:", req.body);
+
+    // Check if confirmation_token_id is actually a payment method ID (starts with pm_)
+    const isPaymentMethod = confirmation_token_id?.startsWith("pm_");
+    const isConfirmationToken = confirmation_token_id?.startsWith("ctoken_");
+
+    var args: any = {
+      amount,
+      currency,
+      confirm: true,
+      customer: customer_id,
+      return_url: "com.nellis.stripe://stripe-redirect",
     };
+
+    if (isPaymentMethod) {
+      // Check if this is a new payment method that needs to be attached
+      const pm = await stripeSdk.paymentMethods.retrieve(confirmation_token_id);
+
+      if (!pm.customer && setup_future_usage) {
+        // This is a NEW payment method that needs to be saved
+        console.log(
+          "🆕 New payment method to be saved:",
+          confirmation_token_id
+        );
+
+        // Attach it to the customer BEFORE creating the payment intent
+        await stripeSdk.paymentMethods.attach(confirmation_token_id, {
+          customer: customer_id,
+        });
+        console.log("✅ Payment method attached to customer");
+
+        args.payment_method = confirmation_token_id;
+        args.setup_future_usage = setup_future_usage;
+      } else if (pm.customer) {
+        // This is an existing saved payment method
+        console.log("📌 Using saved payment method:", confirmation_token_id);
+        args.payment_method = confirmation_token_id;
+        args.off_session = true;
+      } else {
+        // New payment method but user doesn't want to save it
+        console.log(
+          "🔓 Using payment method without saving:",
+          confirmation_token_id
+        );
+        args.payment_method = confirmation_token_id;
+      }
+    } else if (isConfirmationToken) {
+      // Using a new payment method with confirmation token
+      console.log(
+        "🆕 Using new card with confirmation token:",
+        confirmation_token_id
+      );
+      args.confirmation_token = confirmation_token_id;
+      args.automatic_payment_methods = { enabled: true };
+      if (setup_future_usage) {
+        console.log(
+          "💾 Saving card for future use with setup_future_usage:",
+          setup_future_usage
+        );
+        args.setup_future_usage = setup_future_usage;
+      } else {
+        console.log("⚠️ No setup_future_usage - card will NOT be saved");
+      }
+    } else {
+      throw new Error("Invalid payment method or confirmation token");
+    }
+
+    console.log("📋 Final payment intent args:", JSON.stringify(args, null, 2));
     const intent = await stripeSdk.paymentIntents.create(args);
+    console.log("✅ Payment intent created successfully:", {
+      id: intent.id,
+      status: intent.status,
+      payment_method: intent.payment_method,
+      setup_future_usage: intent.setup_future_usage,
+      customer: intent.customer,
+    });
+
+    // If this was a new card, we need to ensure the payment method is attached to customer
+    // When using confirmation_token with confirm:true, the payment method is created but may not be attached
+    if (
+      isConfirmationToken &&
+      setup_future_usage &&
+      intent.payment_method &&
+      intent.status === "succeeded"
+    ) {
+      try {
+        const pmId =
+          typeof intent.payment_method === "string"
+            ? intent.payment_method
+            : intent.payment_method.id;
+
+        // Check if payment method is already attached to customer
+        const pm = await stripeSdk.paymentMethods.retrieve(pmId);
+        console.log("💳 Payment method details:", {
+          id: pm.id,
+          customer: pm.customer,
+          attached: !!pm.customer,
+        });
+
+        if (!pm.customer) {
+          console.log("🔗 Attaching payment method to customer:", pmId);
+          await stripeSdk.paymentMethods.attach(pmId, {
+            customer: customer_id,
+          });
+          console.log("✅ Payment method attached to customer successfully");
+        } else {
+          console.log("✅ Payment method already attached to customer");
+        }
+      } catch (attachError: any) {
+        console.error(
+          "⚠️ Warning: Failed to attach payment method:",
+          attachError.message
+        );
+        // Don't fail the whole request if attachment fails
+      }
+    }
+
     res.json({
       client_secret: intent.client_secret,
+      clientSecret: intent.client_secret,
     });
   } catch (err: any) {
-    res.status(err.statusCode).json({ error: err.message });
+    console.error("❌ Error creating intent:", err.message);
+    res.status(err.statusCode || 400).json({ error: err.message });
   }
 });
 
@@ -448,6 +578,63 @@ router.get("/config", async (req, res) => {
       key: process.env.STRIPE_PUBLISHABLE_KEY || "",
     });
   } catch (error: any) {
+    res.status(400).json({ error: { message: error.message } });
+  }
+});
+
+// Debug endpoint - check saved payment methods for a customer
+router.get("/debug/payment-methods/:customerId", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+
+    const paymentMethods = await stripeSdk.paymentMethods.list({
+      customer: customerId,
+      type: "card",
+    });
+
+    res.json({
+      customer: customerId,
+      count: paymentMethods.data.length,
+      paymentMethods: paymentMethods.data.map((pm) => ({
+        id: pm.id,
+        card: pm.card
+          ? {
+              brand: pm.card.brand,
+              last4: pm.card.last4,
+              exp_month: pm.card.exp_month,
+              exp_year: pm.card.exp_year,
+            }
+          : null,
+      })),
+    });
+  } catch (error: any) {
+    console.error("Error fetching payment methods:", error);
+    res.status(400).json({ error: { message: error.message } });
+  }
+});
+
+// Debug endpoint - check a specific payment method
+router.get("/debug/payment-method/:pmId", async (req, res) => {
+  try {
+    const { pmId } = req.params;
+
+    const paymentMethod = await stripeSdk.paymentMethods.retrieve(pmId);
+
+    res.json({
+      id: paymentMethod.id,
+      customer: paymentMethod.customer,
+      type: paymentMethod.type,
+      card: paymentMethod.card
+        ? {
+            brand: paymentMethod.card.brand,
+            last4: paymentMethod.card.last4,
+            exp_month: paymentMethod.card.exp_month,
+            exp_year: paymentMethod.card.exp_year,
+          }
+        : null,
+    });
+  } catch (error: any) {
+    console.error("Error fetching payment method:", error);
     res.status(400).json({ error: { message: error.message } });
   }
 });
