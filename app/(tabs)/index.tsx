@@ -230,7 +230,7 @@ export default function HomeScreen() {
         {/* Keep the view in the render tree for Android, control visibility with opacity */}
         <View>{embeddedPaymentElementView}</View>
         {/* Show loading indicator while the view is loading */}
-        {!loadingError && (
+        {loadingError && (
           <View style={{ paddingVertical: 16, alignItems: "center" }}>
             <ActivityIndicator />
           </View>
@@ -243,8 +243,6 @@ export default function HomeScreen() {
         />
       </View> */}
       <View>
-        {/* Other UI elements */}
-
         <Button
           title="Pay"
           onPress={handleSubmit}

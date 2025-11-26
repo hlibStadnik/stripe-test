@@ -198,12 +198,15 @@ router.post("/create-payment-intent", async (req, res) => {
 });
 
 router.post("/create-intent", async (req, res) => {
+  const customer_id = "cus_TUmiUmrxCQZ6hr";
+
   try {
     var args = {
       amount: 1099,
       currency: "usd",
       // In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
       automatic_payment_methods: { enabled: true },
+      client: customer_id,
     };
     const intent = await stripeSdk.paymentIntents.create(args);
     res.json({
@@ -404,6 +407,46 @@ router.get("/available-discounts", async (req, res) => {
     }));
 
     res.json({ discounts });
+  } catch (error: any) {
+    res.status(400).json({ error: { message: error.message } });
+  }
+});
+
+// Payment Sheet endpoint with CustomerSession for saved payment methods
+router.post("/payment-sheet", async (req, res) => {
+  try {
+    const customer_id = "cus_TUmiUmrxCQZ6hr";
+    console.log("🚀 ~ customer_id:", customer_id);
+    // Create a CustomerSession with saved payment method features enabled
+    const customerSession = await stripeSdk.customerSessions.create({
+      customer: customer_id,
+      components: {
+        mobile_payment_element: {
+          enabled: true,
+          features: {
+            payment_method_save: "enabled",
+            payment_method_redisplay: "enabled",
+            payment_method_remove: "enabled",
+          },
+        },
+      } as any, // TypeScript workaround for mobile_payment_element
+    });
+
+    res.json({
+      customerSessionClientSecret: customerSession.client_secret,
+      customer: customer_id,
+    });
+  } catch (error: any) {
+    res.status(400).json({ error: { message: error.message } });
+  }
+});
+
+// Get Stripe config (publishable key)
+router.get("/config", async (req, res) => {
+  try {
+    res.json({
+      key: process.env.STRIPE_PUBLISHABLE_KEY || "",
+    });
   } catch (error: any) {
     res.status(400).json({ error: { message: error.message } });
   }
