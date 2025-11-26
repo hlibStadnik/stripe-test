@@ -1,87 +1,286 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Image } from "expo-image";
+import {
+  ActivityIndicator,
+  Alert,
+  Button,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import ParallaxScrollView from "@/components/parallax-scroll-view";
+import {
+  IntentConfiguration,
+  EmbeddedPaymentElementConfiguration,
+  IntentCreationCallbackParams,
+  IntentCreationError,
+  RowStyle,
+  useEmbeddedPaymentElement,
+} from "@stripe/stripe-react-native";
+import { useState, useCallback, useEffect } from "react";
+import { API_URL } from "@/utils/config";
+
+const moneyAmount = 99; // $99 is cents
 
 export default function HomeScreen() {
+  const [intentConfig, setIntentConfig] = useState<IntentConfiguration | null>(
+    null
+  );
+  const [elementConfig, setElementConfig] =
+    useState<EmbeddedPaymentElementConfiguration | null>(null);
+
+  const handleConfirm = useCallback(
+    async (
+      confirmationToken: any,
+      shouldSavePaymentMethod: boolean,
+      intentCreationCallback: (params: IntentCreationCallbackParams) => void
+    ) => {
+      console.log("handleConfirm called with token:", confirmationToken.id);
+      console.log("shouldSavePaymentMethod:", shouldSavePaymentMethod);
+      console.log(
+        "intentCreationCallback type:",
+        typeof intentCreationCallback
+      );
+
+      try {
+        // Make a request to your own server and receive a client secret or an error.
+        const response = await fetch(`${API_URL}/create-payment-intent`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            confirmation_token_id: confirmationToken.id,
+            amount: moneyAmount,
+            currency: "usd",
+          }),
+        });
+
+        console.log("Server response status:", response.status);
+
+        if (!response.ok) {
+          const errorData = await response.text();
+          console.error("Server error:", errorData);
+          throw new Error(`Server error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("Server response data:", data);
+
+        if (!data.clientSecret) {
+          throw new Error("No client secret returned from server");
+        }
+
+        // Call the `intentCreationCallback` with the client secret.
+        console.log("Calling callback with clientSecret");
+        intentCreationCallback({ clientSecret: data.clientSecret });
+      } catch (error: any) {
+        console.error("Error in handleConfirm:", error);
+        // Call the `intentCreationCallback` with the error.
+        intentCreationCallback({
+          error: {
+            code: "Failed",
+            message: error.message || "Unknown error occurred",
+            localizedMessage: error.message || "Unknown error occurred",
+          } as IntentCreationError,
+        });
+      }
+    },
+    []
+  );
+
+  const initialize = useCallback(() => {
+    const newIntentConfig: IntentConfiguration = {
+      mode: {
+        amount: moneyAmount,
+        currencyCode: "USD",
+      },
+      confirmHandler: handleConfirm,
+    };
+
+    const newElementConfig: EmbeddedPaymentElementConfiguration = {
+      merchantDisplayName: "Your Business Name",
+      returnURL: "com.nellis.stripe://stripe-redirect",
+      appearance: {
+        embeddedPaymentElement: {
+          row: {
+            style: RowStyle.Flat,
+          },
+        },
+      },
+      googlePay: {
+        testEnv: true,
+        merchantCountryCode: "US",
+        currencyCode: "USD",
+      },
+    };
+
+    setIntentConfig(newIntentConfig);
+    setElementConfig(newElementConfig);
+  }, [handleConfirm]);
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const {
+    embeddedPaymentElementView,
+    paymentOption,
+    confirm,
+    update,
+    clearPaymentOption,
+    loadingError,
+    // isLoaded,
+  } = useEmbeddedPaymentElement(
+    intentConfig as IntentConfiguration,
+    elementConfig as EmbeddedPaymentElementConfiguration
+  );
+
+  const handleUpdate = useCallback(async () => {
+    // Create a new IntentConfiguration object with updated values
+    const updatedIntentConfig: IntentConfiguration = {
+      ...intentConfig!,
+
+      mode: {
+        amount: 999, // Updated amount after applying discount code
+        currencyCode: "USD",
+      },
+    };
+
+    try {
+      await update(updatedIntentConfig);
+    } catch (error) {
+      // Handle any unexpected errors
+      console.error("Unexpected error during update:", error);
+    }
+  }, [intentConfig, update]);
+
+  // Example of how to use the handleUpdate function
+  const applyDiscountCode = useCallback(
+    async (discountCode: string) => {
+      // Validate discount code with your server
+      try {
+        const response = await fetch(`${API_URL}/apply-discount`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ discountCode }),
+        });
+
+        if (response.ok) {
+          console.log("🚀 ~ CustomCardPaymentScreen ~ response:", response);
+          // Update the intent configuration with the new amount
+          await handleUpdate();
+        }
+      } catch (error) {
+        console.error("Failed to apply discount:", error);
+      }
+    },
+    [handleUpdate]
+  );
+
+  const handleSubmit = useCallback(async () => {
+    setIsProcessing(true); // Disable user interaction, show a spinner.
+
+    try {
+      const result = await confirm();
+
+      switch (result.status) {
+        case "completed":
+          // Payment completed - show a confirmation screen.
+          Alert.alert("Success", "Payment was completed successfully!");
+          break;
+        case "failed":
+          // Encountered an unrecoverable error. You can display the error to the user, log it, and so on.
+          Alert.alert("Error", `Payment failed: ${result.error.message}`);
+          break;
+        case "canceled":
+          // Customer canceled - you should probably do nothing.
+          console.log("Payment was canceled by the user");
+          break;
+      }
+    } catch (error) {
+      // Handle any unexpected errors
+      console.error("Unexpected error during confirmation:", error);
+      Alert.alert("Error", "An unexpected error occurred");
+    } finally {
+      setIsProcessing(false); // Re-enable user interaction, hide spinner.
+    }
+  }, [confirm]);
+
+  if (!intentConfig || !elementConfig) {
+    return (
+      <ParallaxScrollView
+        headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
+        headerImage={
+          <Image
+            source={require("@/assets/images/partial-react-logo.png")}
+            style={styles.reactLogo}
+          />
+        }
+      >
+        <View style={{ paddingVertical: 16, alignItems: "center" }}>
+          <ActivityIndicator size="large" />
+        </View>
+      </ParallaxScrollView>
+    );
+  }
+
   return (
     <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
+      headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
       headerImage={
         <Image
-          source={require('@/assets/images/partial-react-logo.png')}
+          source={require("@/assets/images/partial-react-logo.png")}
           style={styles.reactLogo}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+      }
+    >
+      <View>
+        {/* Handle loading errors through the loadingError property */}
+        {loadingError && (
+          <View>
+            <Text>
+              Failed to load payment form:{" "}
+              {loadingError.message || String(loadingError)}
+            </Text>
+          </View>
+        )}
+        {/* Keep the view in the render tree for Android, control visibility with opacity */}
+        <View>{embeddedPaymentElementView}</View>
+        {/* Show loading indicator while the view is loading */}
+        {!loadingError && (
+          <View style={{ paddingVertical: 16, alignItems: "center" }}>
+            <ActivityIndicator />
+          </View>
+        )}
+      </View>
+      {/* <View>
+        <Button
+          title="Apply Discount Code"
+          onPress={() => applyDiscountCode("123456")}
+        />
+      </View> */}
+      <View>
+        {/* Other UI elements */}
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
+        <Button
+          title="Pay"
+          onPress={handleSubmit}
+          disabled={isProcessing || !paymentOption}
+        />
+
+        {isProcessing && <ActivityIndicator size="large" />}
+      </View>
     </ParallaxScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   stepContainer: {
@@ -93,6 +292,6 @@ const styles = StyleSheet.create({
     width: 290,
     bottom: 0,
     left: 0,
-    position: 'absolute',
+    position: "absolute",
   },
 });
