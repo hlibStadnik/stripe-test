@@ -19,10 +19,13 @@ import {
 } from "@stripe/stripe-react-native";
 import { useState, useCallback, useEffect } from "react";
 import { API_URL } from "@/utils/config";
+import { useDiscount } from "@/hooks/use-discount";
+// const { applyDiscountCode } = useDiscount(intentConfig, update);
 
 const moneyAmount = 99; // $99 is cents
 
 export default function HomeScreen() {
+  const [isProcessing, setIsProcessing] = useState(false);
   const [intentConfig, setIntentConfig] = useState<IntentConfiguration | null>(
     null
   );
@@ -99,7 +102,7 @@ export default function HomeScreen() {
     };
 
     const newElementConfig: EmbeddedPaymentElementConfiguration = {
-      merchantDisplayName: "Your Business Name",
+      merchantDisplayName: "Nellis Auction",
       returnURL: "com.nellis.stripe://stripe-redirect",
       appearance: {
         embeddedPaymentElement: {
@@ -123,8 +126,6 @@ export default function HomeScreen() {
     initialize();
   }, [initialize]);
 
-  const [isProcessing, setIsProcessing] = useState(false);
-
   const {
     embeddedPaymentElementView,
     paymentOption,
@@ -138,65 +139,20 @@ export default function HomeScreen() {
     elementConfig as EmbeddedPaymentElementConfiguration
   );
 
-  const handleUpdate = useCallback(async () => {
-    // Create a new IntentConfiguration object with updated values
-    const updatedIntentConfig: IntentConfiguration = {
-      ...intentConfig!,
-
-      mode: {
-        amount: 999, // Updated amount after applying discount code
-        currencyCode: "USD",
-      },
-    };
-
-    try {
-      await update(updatedIntentConfig);
-    } catch (error) {
-      // Handle any unexpected errors
-      console.error("Unexpected error during update:", error);
-    }
-  }, [intentConfig, update]);
-
-  // Example of how to use the handleUpdate function
-  const applyDiscountCode = useCallback(
-    async (discountCode: string) => {
-      // Validate discount code with your server
-      try {
-        const response = await fetch(`${API_URL}/apply-discount`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ discountCode }),
-        });
-
-        if (response.ok) {
-          console.log("🚀 ~ CustomCardPaymentScreen ~ response:", response);
-          // Update the intent configuration with the new amount
-          await handleUpdate();
-        }
-      } catch (error) {
-        console.error("Failed to apply discount:", error);
-      }
-    },
-    [handleUpdate]
-  );
-
   const handleSubmit = useCallback(async () => {
-    setIsProcessing(true); // Disable user interaction, show a spinner.
+    setIsProcessing(true);
 
     try {
       const result = await confirm();
 
       switch (result.status) {
         case "completed":
-          // Payment completed - show a confirmation screen.
           Alert.alert("Success", "Payment was completed successfully!");
           break;
         case "failed":
-          // Encountered an unrecoverable error. You can display the error to the user, log it, and so on.
           Alert.alert("Error", `Payment failed: ${result.error.message}`);
           break;
         case "canceled":
-          // Customer canceled - you should probably do nothing.
           console.log("Payment was canceled by the user");
           break;
       }
@@ -205,7 +161,7 @@ export default function HomeScreen() {
       console.error("Unexpected error during confirmation:", error);
       Alert.alert("Error", "An unexpected error occurred");
     } finally {
-      setIsProcessing(false); // Re-enable user interaction, hide spinner.
+      setIsProcessing(false);
     }
   }, [confirm]);
 
