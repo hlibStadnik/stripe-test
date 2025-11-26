@@ -19,13 +19,17 @@ import {
 } from "@stripe/stripe-react-native";
 import { useState, useCallback, useEffect } from "react";
 import { API_URL } from "@/utils/config";
-import { useDiscount } from "@/hooks/use-discount";
+import { createCustomerSession } from "@/utils/stripe";
+// import { useDiscount } from "@/hooks/use-discount";
 // const { applyDiscountCode } = useDiscount(intentConfig, update);
 
 const moneyAmount = 99; // $99 is cents
 
 export default function HomeScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [customerSessionClientSecret, setCustomerSessionClientSecret] =
+    useState<string | null>(null);
   const [intentConfig, setIntentConfig] = useState<IntentConfiguration | null>(
     null
   );
@@ -103,6 +107,8 @@ export default function HomeScreen() {
 
     const newElementConfig: EmbeddedPaymentElementConfiguration = {
       merchantDisplayName: "Nellis Auction",
+      customerId: customerId!,
+      customerSessionClientSecret: customerSessionClientSecret!,
       returnURL: "com.nellis.stripe://stripe-redirect",
       appearance: {
         embeddedPaymentElement: {
@@ -120,11 +126,24 @@ export default function HomeScreen() {
 
     setIntentConfig(newIntentConfig);
     setElementConfig(newElementConfig);
-  }, [handleConfirm]);
+  }, [handleConfirm, customerId, customerSessionClientSecret]);
 
   useEffect(() => {
-    initialize();
-  }, [initialize]);
+    const setupCustomer = async () => {
+      const session = await createCustomerSession();
+      if (session) {
+        setCustomerId(session.customer);
+        setCustomerSessionClientSecret(session.customerSessionClientSecret);
+      }
+    };
+    setupCustomer();
+  }, []);
+
+  useEffect(() => {
+    if (customerId && customerSessionClientSecret) {
+      initialize();
+    }
+  }, [initialize, customerId, customerSessionClientSecret]);
 
   const {
     embeddedPaymentElementView,
@@ -165,7 +184,12 @@ export default function HomeScreen() {
     }
   }, [confirm]);
 
-  if (!intentConfig || !elementConfig) {
+  if (
+    !intentConfig ||
+    !elementConfig ||
+    !customerId ||
+    !customerSessionClientSecret
+  ) {
     return (
       <ParallaxScrollView
         headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
