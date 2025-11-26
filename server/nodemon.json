@@ -1,0 +1,5 @@
+    {
+      "watch": ["routes", "clients"],
+      "ext": "ts,json",
+      "exec": "npx tsx server.ts"
+    }

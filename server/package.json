@@ -1,0 +1,42 @@
+{
+  "name": "stripe-music-shop-dev-build",
+  "version": "1.0.0",
+  "description": "Ipsum Street Music Shop",
+  "main": "client.js",
+  "scripts": {
+    "build": "npx tsc",
+    "lint": "npx eslint",
+    "prestart": "npm run lint && npm run build",
+    "start": "npx tsx server.ts",
+    "dev": "npx tsx watch server.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "stripe-ecosystem",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.1",
+    "express": "^5.1.0",
+    "express-validator": "7.2.1",
+    "stripe": "^18.3.0",
+    "uuid": "^8.3.2"
+  },
+  "devDependencies": {
+    "@babel/eslint-parser": "^7.27.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.13",
+    "eslint": "8.57.1",
+    "eslint-config-prettier": "^10.1.0",
+    "eslint-config-recommended": "^4.1.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-spellcheck": "^0.0.20",
+    "eslint-plugin-import": "^2.32.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.39.1"
+  }
+}

@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4242:4242"
+    environment:
+      - NODE_ENV=production
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - STATIC_DIR=${STATIC_DIR:-../client}
+      - DOMAIN=${DOMAIN:-http://localhost:4242}
+      - PORT=${PORT:-5173}
+      - CI=${CI:-false}
+      - CHALLENGE_ID=${CHALLENGE_ID:-random-bronze-sloth}
+    volumes:
+      - ../client:/app/../client:ro
+    restart: unless-stopped
