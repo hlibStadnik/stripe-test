@@ -11,10 +11,10 @@ import {
 } from "react-native";
 
 import ParallaxScrollView from "@/components/parallax-scroll-view";
-import { useState, useEffect } from "react";
-import { API_URL } from "@/utils/config";
-import { createCustomerSession } from "@/utils/stripe";
+import { useState } from "react";
 import { PaymentForm } from "@/components/payment-form";
+import { useCustomerSession } from "@/hooks/use-customer-session";
+import { useStoreCredit } from "@/hooks/use-store-credit";
 
 const moneyAmount = (() => {
   const now = new Date();
@@ -24,10 +24,8 @@ const moneyAmount = (() => {
 })();
 
 export default function HomeScreen() {
-  const [customerId, setCustomerId] = useState<string | null>(null);
-  const [customerSessionClientSecret, setCustomerSessionClientSecret] =
-    useState<string | null>(null);
-  const [storeCredit, setStoreCredit] = useState(0);
+  const { customerId, customerSessionClientSecret } = useCustomerSession();
+  const { storeCredit } = useStoreCredit(customerId);
 
   // Split payment controls
   const [enableSplitPayment, setEnableSplitPayment] = useState(false);
@@ -143,32 +141,6 @@ export default function HomeScreen() {
     }
   };
 
-  useEffect(() => {
-    const setupCustomer = async () => {
-      const session = await createCustomerSession();
-      if (session) {
-        console.log("✅ Customer session created:", session.customer);
-        setCustomerId(session.customer);
-        setCustomerSessionClientSecret(session.customerSessionClientSecret);
-
-        // Fetch store credit balance
-        try {
-          const response = await fetch(
-            `${API_URL}/store-credit/${session.customer}`
-          );
-          const data = await response.json();
-          setStoreCredit(data.balance || 0);
-          console.log("💰 Store credit balance:", data.balance);
-        } catch (error) {
-          console.error("Failed to fetch store credit:", error);
-        }
-      } else {
-        console.error("❌ Failed to create customer session");
-      }
-    };
-    setupCustomer();
-  }, []);
-
   if (!customerId || !customerSessionClientSecret) {
     return (
       <ParallaxScrollView
@@ -214,45 +186,39 @@ export default function HomeScreen() {
       </View>
 
       {/* Payment Forms */}
-      {!enableSplitPayment ? (
-        <PaymentForm
-          amount={moneyAmount}
-          customerId={customerId}
-          customerSessionClientSecret={customerSessionClientSecret}
-          storeCredit={storeCredit}
-          onConfirmReady={(fn) => setPayment1Confirm(() => fn)}
-          isProcessingExternal={isProcessing}
-        />
-      ) : (
-        <>
-          {getPayment1AmountInCents() > 0 && (
-            <PaymentForm
-              amount={getPayment1AmountInCents()}
-              customerId={customerId}
-              customerSessionClientSecret={customerSessionClientSecret}
-              storeCredit={storeCredit}
-              onConfirmReady={(fn) => setPayment1Confirm(() => fn)}
-              isProcessingExternal={isProcessing}
-            />
-          )}
-          {getPayment2AmountInCents() > 0 && (
-            <PaymentForm
-              amount={getPayment2AmountInCents()}
-              customerId={customerId}
-              customerSessionClientSecret={customerSessionClientSecret}
-              onConfirmReady={(fn) => setPayment2Confirm(() => fn)}
-              isProcessingExternal={isProcessing}
-            />
-          )}
-        </>
-      )}
+
+      <PaymentForm
+        amount={moneyAmount}
+        customerId={customerId}
+        customerSessionClientSecret={customerSessionClientSecret}
+        storeCredit={storeCredit}
+        onConfirmReady={(fn) => setPayment1Confirm(() => fn)}
+        isProcessingExternal={isProcessing}
+        isSplittingPayment={enableSplitPayment}
+      />
+
       <View style={styles.splitToggleContainer}>
         <Text style={styles.splitLabel}>Split payment</Text>
         <Switch
           value={enableSplitPayment}
+          disabled={true}
           onValueChange={setEnableSplitPayment}
         />
       </View>
+      {enableSplitPayment && (
+        <>
+          <Text>Todo: split with store credit</Text>
+
+          {/* <PaymentForm
+            amount={getPayment2AmountInCents()}
+            customerId={customerId}
+            customerSessionClientSecret={customerSessionClientSecret}
+            onConfirmReady={(fn) => setPayment2Confirm(() => fn)}
+            isProcessingExternal={isProcessing}
+            isSplittingPayment={enableSplitPayment}
+          /> */}
+        </>
+      )}
 
       <View style={styles.payButtonContainer}>
         <Button title={`Pay`} onPress={handlePayAll} disabled={isProcessing} />
@@ -323,35 +289,6 @@ const styles = StyleSheet.create({
   splitLabel: {
     fontSize: 16,
     fontWeight: "600",
-  },
-  splitInputsContainer: {
-    padding: 16,
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#ddd",
-  },
-  inputRow: {
-    marginBottom: 12,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  splitInfo: {
-    fontSize: 14,
-    color: "#666",
-    fontWeight: "500",
-    marginTop: 8,
   },
   payButtonContainer: {
     marginTop: 16,

@@ -1,11 +1,4 @@
-import {
-  ActivityIndicator,
-  Alert,
-  Button,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";
 
 import {
   IntentConfiguration,
@@ -24,6 +17,7 @@ interface PaymentFormProps {
   storeCredit?: number;
   onConfirmReady?: (confirmFn: () => Promise<any>) => void;
   isProcessingExternal?: boolean;
+  isSplittingPayment?: boolean;
 }
 
 export function PaymentForm({
@@ -33,6 +27,7 @@ export function PaymentForm({
   storeCredit = 0,
   onConfirmReady,
   isProcessingExternal = false,
+  isSplittingPayment = false,
 }: PaymentFormProps) {
   const [appliedCredit, setAppliedCredit] = useState(0);
   const [finalAmount, setFinalAmount] = useState(amount);
@@ -50,11 +45,13 @@ export function PaymentForm({
           },
         },
       },
-      googlePay: {
-        testEnv: true,
-        merchantCountryCode: "US",
-        currencyCode: "USD",
-      },
+      googlePay: isSplittingPayment
+        ? undefined
+        : {
+            testEnv: true,
+            merchantCountryCode: "US",
+            currencyCode: "USD",
+          },
     });
 
   const handleConfirm = useCallback(
@@ -121,59 +118,6 @@ export function PaymentForm({
     mode: { amount: finalAmount, currencyCode: "USD" },
   });
 
-  const applyStoreCredit = useCallback(() => {
-    const creditToApply = Math.min(storeCredit, amount);
-    setAppliedCredit(creditToApply);
-    const newAmount = Math.max(amount - creditToApply, 0);
-    setFinalAmount(newAmount);
-    console.log(
-      `[ Applied store credit:`,
-      creditToApply,
-      "New amount:",
-      newAmount
-    );
-  }, [storeCredit, amount]);
-
-  const initialize = useCallback(() => {
-    const newIntentConfig: IntentConfiguration = {
-      mode: {
-        amount: finalAmount,
-        currencyCode: "USD",
-      },
-      confirmHandler: handleConfirm,
-    };
-
-    const newElementConfig: EmbeddedPaymentElementConfiguration = {
-      merchantDisplayName: "Nellis Auction",
-      customerId: customerId,
-      customerSessionClientSecret: customerSessionClientSecret,
-      returnURL: "com.nellis.stripe://stripe-redirect",
-      appearance: {
-        embeddedPaymentElement: {
-          row: {
-            style: "floating" as any,
-          },
-        },
-      },
-      googlePay: {
-        testEnv: true,
-        merchantCountryCode: "US",
-        currencyCode: "USD",
-      },
-    };
-
-    setIntentConfig(newIntentConfig);
-    setElementConfig(newElementConfig);
-  }, [handleConfirm, customerId, customerSessionClientSecret, finalAmount]);
-
-  useEffect(() => {
-    if (customerId && customerSessionClientSecret) {
-      setTimeout(() => {
-        // initialize();
-      }, 100);
-    }
-  }, [initialize, customerId, customerSessionClientSecret]);
-
   const { embeddedPaymentElementView, paymentOption, confirm, loadingError } =
     useEmbeddedPaymentElement(
       intentConfig as IntentConfiguration,
@@ -201,31 +145,6 @@ export function PaymentForm({
 
   return (
     <View style={styles.container}>
-      {/* Store Credit Section */}
-      {/* {storeCredit > 0 && (
-        <View style={styles.storeCreditContainer}>
-          <Text style={styles.storeCreditTitle}>
-            💰 Store Credit Available: ${(storeCredit / 100).toFixed(2)}
-          </Text>
-          <Text style={styles.amountText}>
-            Amount: ${(amount / 100).toFixed(2)}
-          </Text>
-          {appliedCredit > 0 && (
-            <>
-              <Text style={styles.creditApplied}>
-                ✅ Store Credit Applied: -${(appliedCredit / 100).toFixed(2)}
-              </Text>
-              <Text style={styles.finalAmount}>
-                Amount to Pay: ${(finalAmount / 100).toFixed(2)}
-              </Text>
-            </>
-          )}
-          {appliedCredit === 0 && (
-            <Button title="Apply Store Credit" onPress={applyStoreCredit} />
-          )}
-        </View>
-      )} */}
-
       <View>
         {loadingError && (
           <View>
@@ -252,36 +171,8 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 24,
   },
-
-  storeCreditContainer: {
-    padding: 16,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  storeCreditTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 8,
-  },
-  amountText: {
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  creditApplied: {
-    fontSize: 14,
-    color: "green",
-    marginBottom: 4,
-  },
-  finalAmount: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
   errorText: {
     color: "red",
     marginBottom: 8,
-  },
-  buttonContainer: {
-    marginTop: 16,
   },
 });
