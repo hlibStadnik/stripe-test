@@ -1,4 +1,12 @@
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  Image,
+} from "react-native";
 
 import {
   IntentConfiguration,
@@ -6,6 +14,10 @@ import {
   IntentCreationCallbackParams,
   IntentCreationError,
   useEmbeddedPaymentElement,
+  RowStyle,
+  BillingDetails,
+  CustomPaymentMethod,
+  CustomPaymentMethodResult,
 } from "@stripe/stripe-react-native";
 import { useState, useCallback, useEffect } from "react";
 import { API_URL } from "@/utils/config";
@@ -29,6 +41,7 @@ export function PaymentForm({
   isProcessingExternal = false,
   isSplittingPayment = false,
 }: PaymentFormProps) {
+  const [selectedMethod, setSelectedMethod] = useState<string>("card");
   const [appliedCredit, setAppliedCredit] = useState(0);
   const [finalAmount, setFinalAmount] = useState(amount);
 
@@ -41,7 +54,29 @@ export function PaymentForm({
       appearance: {
         embeddedPaymentElement: {
           row: {
-            style: "floating" as any,
+            style: RowStyle.FlatWithRadio,
+            additionalInsets: 10,
+            flat: {
+              separatorThickness: 0,
+              topSeparatorEnabled: false,
+            },
+            floating: {
+              spacing: 32,
+            },
+          },
+        },
+        shapes: {
+          borderRadius: 12,
+          borderWidth: 2,
+        },
+        primaryButton: {
+          shapes: {
+            borderRadius: 18,
+          },
+          colors: {
+            // background: "#f00",
+            text: "#ffffff",
+            border: "#4285f4",
           },
         },
       },
@@ -51,6 +86,11 @@ export function PaymentForm({
             testEnv: true,
             merchantCountryCode: "US",
             currencyCode: "USD",
+          },
+      applePay: isSplittingPayment
+        ? undefined
+        : {
+            merchantCountryCode: "US",
           },
     });
 
@@ -91,6 +131,7 @@ export function PaymentForm({
               appliedCredit / 100
             ).toFixed(2)} used.`
           );
+          clearPaymentOption();
           return;
         }
 
@@ -118,11 +159,16 @@ export function PaymentForm({
     mode: { amount: finalAmount, currencyCode: "USD" },
   });
 
-  const { embeddedPaymentElementView, paymentOption, confirm, loadingError } =
-    useEmbeddedPaymentElement(
-      intentConfig as IntentConfiguration,
-      elementConfig as EmbeddedPaymentElementConfiguration
-    );
+  const {
+    embeddedPaymentElementView,
+    paymentOption,
+    confirm,
+    loadingError,
+    clearPaymentOption,
+  } = useEmbeddedPaymentElement(
+    intentConfig as IntentConfiguration,
+    elementConfig as EmbeddedPaymentElementConfiguration
+  );
 
   useEffect(() => {
     if (onConfirmReady && confirm) {
@@ -145,6 +191,7 @@ export function PaymentForm({
 
   return (
     <View style={styles.container}>
+      {/* Stripe Payment Element with custom styling */}
       <View>
         {loadingError && (
           <View>
@@ -162,6 +209,34 @@ export function PaymentForm({
         )}
       </View>
 
+      {/* Custom Store Credit Option */}
+      {storeCredit > 0 && (
+        <TouchableOpacity
+          style={[
+            selectedMethod === "storecredit" && styles.methodCardSelected,
+            {
+              paddingVertical: 25,
+            },
+          ]}
+          onPress={() => clearPaymentOption()}
+          //   onPress={() => setSelectedMethod("storecredit")}
+        >
+          <View style={styles.methodRow}>
+            <View style={styles.radioOuter}>
+              {selectedMethod === "storecredit" && (
+                <View style={styles.radioInner} />
+              )}
+            </View>
+            <Image
+              source={require("@/assets/images/credit.png")}
+              resizeMode="contain"
+              style={{ width: 20, height: 20, marginRight: 8, marginLeft: 4 }}
+            />
+            <Text style={styles.methodLabel}>Store credit</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
       {isProcessingExternal && <ActivityIndicator size="large" />}
     </View>
   );
@@ -170,6 +245,56 @@ export function PaymentForm({
 const styles = StyleSheet.create({
   container: {
     marginBottom: 24,
+  },
+  methodCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    paddingVertical: 25,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#e0e0e0",
+    marginTop: 12,
+  },
+  methodCardSelected: {
+    borderColor: "#4285f4",
+  },
+  methodRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#666",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  radioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#4285f4",
+  },
+  methodLabel: {
+    fontSize: 16,
+    color: "#000",
+  },
+  storeCreditBadge: {
+    backgroundColor: "#e53935",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  storeCreditText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
   },
   errorText: {
     color: "red",
