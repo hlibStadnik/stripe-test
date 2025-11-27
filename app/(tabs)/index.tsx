@@ -6,130 +6,142 @@ import {
   StyleSheet,
   Text,
   View,
+  Switch,
+  TextInput,
 } from "react-native";
 
 import ParallaxScrollView from "@/components/parallax-scroll-view";
-import {
-  IntentConfiguration,
-  EmbeddedPaymentElementConfiguration,
-  IntentCreationCallbackParams,
-  IntentCreationError,
-  RowStyle,
-  useEmbeddedPaymentElement,
-} from "@stripe/stripe-react-native";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { API_URL } from "@/utils/config";
 import { createCustomerSession } from "@/utils/stripe";
-// import { useDiscount } from "@/hooks/use-discount";
-// const { applyDiscountCode } = useDiscount(intentConfig, update);
+import { PaymentForm } from "@/components/payment-form";
 
-const moneyAmount = 99; // $99 is cents
+const moneyAmount = (() => {
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  return hours * 100 + minutes;
+})();
 
 export default function HomeScreen() {
-  const [isProcessing, setIsProcessing] = useState(false);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerSessionClientSecret, setCustomerSessionClientSecret] =
     useState<string | null>(null);
-  const [intentConfig, setIntentConfig] = useState<IntentConfiguration | null>(
-    null
-  );
-  const [elementConfig, setElementConfig] =
-    useState<EmbeddedPaymentElementConfiguration | null>(null);
+  const [storeCredit, setStoreCredit] = useState(0);
 
-  const handleConfirm = useCallback(
-    async (
-      confirmationToken: any,
-      shouldSavePaymentMethod: boolean,
-      intentCreationCallback: (params: IntentCreationCallbackParams) => void
-    ) => {
-      console.log("confirmationToken --- :", confirmationToken);
-      console.log("shouldSavePaymentMethod:", shouldSavePaymentMethod);
-      console.log(
-        "intentCreationCallback type:",
-        typeof intentCreationCallback
-      );
+  // Split payment controls
+  const [enableSplitPayment, setEnableSplitPayment] = useState(false);
+  const [payment1Amount, setPayment1Amount] = useState("");
+  const [payment2Amount, setPayment2Amount] = useState("");
+
+  // Payment confirm functions
+  const [payment1Confirm, setPayment1Confirm] = useState<
+    (() => Promise<any>) | null
+  >(null);
+  const [payment2Confirm, setPayment2Confirm] = useState<
+    (() => Promise<any>) | null
+  >(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handlePayment1Change = (value: string) => {
+    setPayment1Amount(value);
+    const amount1 = parseFloat(value);
+    if (!isNaN(amount1) && amount1 >= 0) {
+      const remainingCents = moneyAmount - Math.round(amount1 * 100);
+      const remaining = Math.max(0, remainingCents / 100);
+      setPayment2Amount(remaining.toFixed(2));
+    }
+  };
+
+  const handlePayment2Change = (value: string) => {
+    setPayment2Amount(value);
+    const amount2 = parseFloat(value);
+    if (!isNaN(amount2) && amount2 >= 0) {
+      const remainingCents = moneyAmount - Math.round(amount2 * 100);
+      const remaining = Math.max(0, remainingCents / 100);
+      setPayment1Amount(remaining.toFixed(2));
+    }
+  };
+
+  const getPayment1AmountInCents = () => {
+    const amount = parseFloat(payment1Amount);
+    return !isNaN(amount) && amount > 0 ? Math.round(amount * 100) : 0;
+  };
+
+  const getPayment2AmountInCents = () => {
+    const amount = parseFloat(payment2Amount);
+    return !isNaN(amount) && amount > 0 ? Math.round(amount * 100) : 0;
+  };
+
+  const totalSplit = getPayment1AmountInCents() + getPayment2AmountInCents();
+
+  const handlePayAll = async () => {
+    if (!enableSplitPayment) {
+      // Single payment mode
+      if (!payment1Confirm) {
+        Alert.alert("Error", "Payment method not ready");
+        return;
+      }
+
+      setIsProcessing(true);
 
       try {
-        // Make a request to your own server and receive a client secret or an error.
-        const response = await fetch(`${API_URL}/create-intent`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            confirmation_token_id: confirmationToken.id,
-            amount: moneyAmount,
-            currency: "usd",
-            setup_future_usage: shouldSavePaymentMethod
-              ? "off_session"
-              : undefined,
-          }),
-        });
-
-        console.log("Server response status:", response.status);
-
-        if (!response.ok) {
-          const errorData = await response.text();
-          console.error("Server error:", errorData);
-          throw new Error(`Server error: ${response.status}`);
+        console.log("Executing Single Payment...");
+        const result = await payment1Confirm();
+        if (result.status === "failed") {
+          throw new Error(`Payment failed: ${result.error.message}`);
         }
-
-        const data = await response.json();
-        console.log("Server response data:", data);
-
-        if (!data.clientSecret) {
-          throw new Error("No client secret returned from server");
-        }
-
-        // Call the `intentCreationCallback` with the client secret.
-        console.log("Calling callback with clientSecret");
-        intentCreationCallback({ clientSecret: data.clientSecret });
+        console.log("Payment completed:", result.status);
+        Alert.alert("Success", "Payment completed successfully!");
       } catch (error: any) {
-        console.error("Error in handleConfirm:", error);
-        // Call the `intentCreationCallback` with the error.
-        intentCreationCallback({
-          error: {
-            code: "Failed",
-            message: error.message || "Unknown error occurred",
-            localizedMessage: error.message || "Unknown error occurred",
-          } as IntentCreationError,
-        });
+        console.error("Payment error:", error);
+        Alert.alert("Error", error.message || "Payment failed");
+      } finally {
+        setIsProcessing(false);
       }
-    },
-    [customerId]
-  );
+      return;
+    }
 
-  const initialize = useCallback(() => {
-    const newIntentConfig: IntentConfiguration = {
-      mode: {
-        amount: moneyAmount,
-        currencyCode: "USD",
-      },
-      confirmHandler: handleConfirm,
-    };
+    // Split payment mode
+    if (totalSplit !== moneyAmount) {
+      Alert.alert(
+        "Error",
+        `Split payments must total exactly $${(moneyAmount / 100).toFixed(2)}`
+      );
+      return;
+    }
 
-    const newElementConfig: EmbeddedPaymentElementConfiguration = {
-      merchantDisplayName: "Nellis Auction",
-      customerId: customerId!,
-      customerSessionClientSecret: customerSessionClientSecret!,
-      returnURL: "com.nellis.stripe://stripe-redirect",
-      appearance: {
-        embeddedPaymentElement: {
-          row: {
-            style: RowStyle.Flat,
-          },
-        },
-      },
-      googlePay: {
-        testEnv: true,
-        merchantCountryCode: "US",
-        currencyCode: "USD",
-      },
-    };
+    setIsProcessing(true);
 
-    setIntentConfig(newIntentConfig);
-    setElementConfig(newElementConfig);
-  }, [handleConfirm, customerId, customerSessionClientSecret]);
+    try {
+      // Execute payment 1 only if amount > 0
+      if (getPayment1AmountInCents() > 0 && payment1Confirm) {
+        console.log("Executing Payment 1...");
+        const result1 = await payment1Confirm();
+        if (result1.status === "failed") {
+          throw new Error(`Payment 1 failed: ${result1.error.message}`);
+        }
+        console.log("Payment 1 completed:", result1.status);
+      }
+
+      // Execute payment 2 only if amount > 0
+      if (getPayment2AmountInCents() > 0 && payment2Confirm) {
+        console.log("Executing Payment 2...");
+        const result2 = await payment2Confirm();
+        if (result2.status === "failed") {
+          throw new Error(`Payment 2 failed: ${result2.error.message}`);
+        }
+        console.log("Payment 2 completed:", result2.status);
+      }
+
+      Alert.alert("Success", "All payments completed successfully!");
+    } catch (error: any) {
+      console.error("Payment error:", error);
+      Alert.alert("Error", error.message || "Payment failed");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   useEffect(() => {
     const setupCustomer = async () => {
@@ -138,6 +150,18 @@ export default function HomeScreen() {
         console.log("✅ Customer session created:", session.customer);
         setCustomerId(session.customer);
         setCustomerSessionClientSecret(session.customerSessionClientSecret);
+
+        // Fetch store credit balance
+        try {
+          const response = await fetch(
+            `${API_URL}/store-credit/${session.customer}`
+          );
+          const data = await response.json();
+          setStoreCredit(data.balance || 0);
+          console.log("💰 Store credit balance:", data.balance);
+        } catch (error) {
+          console.error("Failed to fetch store credit:", error);
+        }
       } else {
         console.error("❌ Failed to create customer session");
       }
@@ -145,66 +169,7 @@ export default function HomeScreen() {
     setupCustomer();
   }, []);
 
-  useEffect(() => {
-    if (customerId && customerSessionClientSecret) {
-      console.log("🔧 Initializing payment element with customer:", customerId);
-      setTimeout(() => {
-        initialize();
-      }, 100);
-    }
-  }, [initialize, customerId, customerSessionClientSecret]);
-
-  const {
-    embeddedPaymentElementView,
-    paymentOption,
-    confirm,
-    update,
-    clearPaymentOption,
-    loadingError,
-    // isLoaded,
-  } = useEmbeddedPaymentElement(
-    intentConfig as IntentConfiguration,
-    elementConfig as EmbeddedPaymentElementConfiguration
-  );
-
-  const handleSubmit = useCallback(async () => {
-    setIsProcessing(true);
-
-    try {
-      const result = await confirm();
-
-      switch (result.status) {
-        case "completed":
-          Alert.alert("Success", "Payment was completed successfully!");
-          break;
-        case "failed":
-          Alert.alert("Error", `Payment failed: ${result.error.message}`);
-          break;
-        case "canceled":
-          console.log("Payment was canceled by the user");
-          break;
-      }
-    } catch (error) {
-      // Handle any unexpected errors
-      console.error("Unexpected error during confirmation:", error);
-      Alert.alert("Error", "An unexpected error occurred");
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [confirm]);
-
-  if (
-    !intentConfig ||
-    !elementConfig ||
-    !customerId ||
-    !customerSessionClientSecret
-  ) {
-    console.log("⏳ Waiting for initialization...", {
-      intentConfig: !!intentConfig,
-      elementConfig: !!elementConfig,
-      customerId: !!customerId,
-      customerSessionClientSecret: !!customerSessionClientSecret,
-    });
+  if (!customerId || !customerSessionClientSecret) {
     return (
       <ParallaxScrollView
         headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
@@ -232,38 +197,65 @@ export default function HomeScreen() {
         />
       }
     >
-      <View>
-        {/* Handle loading errors through the loadingError property */}
-        {loadingError && (
-          <View>
-            <Text>
-              Failed to load payment form:{" "}
-              {loadingError.message || String(loadingError)}
-            </Text>
-          </View>
-        )}
-        {/* Keep the view in the render tree for Android, control visibility with opacity */}
-        <View>{embeddedPaymentElementView}</View>
-        {/* Show loading indicator while the view is loading */}
-        {loadingError && (
-          <View style={{ paddingVertical: 16, alignItems: "center" }}>
-            <ActivityIndicator />
-          </View>
-        )}
+      <View style={styles.headerContainer}>
+        <Text style={styles.locationText}>North Las Vegas</Text>
+        <Text style={styles.pickupsText}>Pick Ups 1</Text>
+        <Text style={styles.totalText}>
+          Total ${(moneyAmount / 100).toFixed(2)}
+        </Text>
       </View>
-      {/* <View>
-        <Button
-          title="Apply Discount Code"
-          onPress={() => applyDiscountCode("123456")}
-        />
-      </View> */}
-      <View>
-        <Button
-          title="Pay"
-          onPress={handleSubmit}
-          disabled={isProcessing || !paymentOption}
-        />
 
+      {/* Payment Methods Section */}
+      <View style={styles.paymentMethodsContainer}>
+        <Text style={styles.paymentMethodsTitle}>PAYMENT METHODS</Text>
+        <Text style={styles.paymentMethodsSubtitle}>
+          Choose your payment method
+        </Text>
+      </View>
+
+      {/* Payment Forms */}
+      {!enableSplitPayment ? (
+        <PaymentForm
+          amount={moneyAmount}
+          customerId={customerId}
+          customerSessionClientSecret={customerSessionClientSecret}
+          storeCredit={storeCredit}
+          onConfirmReady={(fn) => setPayment1Confirm(() => fn)}
+          isProcessingExternal={isProcessing}
+        />
+      ) : (
+        <>
+          {getPayment1AmountInCents() > 0 && (
+            <PaymentForm
+              amount={getPayment1AmountInCents()}
+              customerId={customerId}
+              customerSessionClientSecret={customerSessionClientSecret}
+              storeCredit={storeCredit}
+              onConfirmReady={(fn) => setPayment1Confirm(() => fn)}
+              isProcessingExternal={isProcessing}
+            />
+          )}
+          {getPayment2AmountInCents() > 0 && (
+            <PaymentForm
+              amount={getPayment2AmountInCents()}
+              customerId={customerId}
+              customerSessionClientSecret={customerSessionClientSecret}
+              onConfirmReady={(fn) => setPayment2Confirm(() => fn)}
+              isProcessingExternal={isProcessing}
+            />
+          )}
+        </>
+      )}
+      <View style={styles.splitToggleContainer}>
+        <Text style={styles.splitLabel}>Split payment</Text>
+        <Switch
+          value={enableSplitPayment}
+          onValueChange={setEnableSplitPayment}
+        />
+      </View>
+
+      <View style={styles.payButtonContainer}>
+        <Button title={`Pay`} onPress={handlePayAll} disabled={isProcessing} />
         {isProcessing && <ActivityIndicator size="large" />}
       </View>
     </ParallaxScrollView>
@@ -271,20 +263,98 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
   reactLogo: {
     height: 178,
     width: 290,
     bottom: 0,
     left: 0,
     position: "absolute",
+  },
+  headerContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#f5f5f5",
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: "#666",
+    marginBottom: 16,
+  },
+  locationText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#8B1A1A",
+    flex: 1,
+  },
+  pickupsText: {
+    fontSize: 16,
+    fontWeight: "normal",
+    color: "#000",
+    flex: 1,
+    textAlign: "center",
+  },
+  totalText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#000",
+    flex: 1,
+    textAlign: "right",
+  },
+  paymentMethodsContainer: {
+    paddingVertical: 10,
+  },
+  paymentMethodsTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#000",
+    marginBottom: 8,
+  },
+  paymentMethodsSubtitle: {
+    fontSize: 16,
+    color: "#666",
+  },
+  splitToggleContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+  },
+  splitLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  splitInputsContainer: {
+    padding: 16,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  inputRow: {
+    marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  splitInfo: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "500",
+    marginTop: 8,
+  },
+  payButtonContainer: {
+    marginTop: 16,
+    marginBottom: 24,
   },
 });

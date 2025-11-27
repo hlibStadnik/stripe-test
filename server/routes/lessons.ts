@@ -218,9 +218,27 @@ router.post("/create-intent", async (req, res) => {
       amount = 1099,
       currency = "usd",
       setup_future_usage,
+      store_credit_applied = 0,
     } = req.body;
 
     console.log("🚀 ~ create-intent body:", req.body);
+
+    // If amount is 0 after store credit, complete the order without Stripe
+    if (amount === 0 && store_credit_applied > 0) {
+      console.log("💰 Order fully paid with store credit");
+
+      // Deduct store credit
+      if (storeCreditBalances[customer_id]) {
+        storeCreditBalances[customer_id] -= store_credit_applied;
+      }
+
+      return res.json({
+        success: true,
+        paidWithStoreCredit: true,
+        amount: 0,
+        storeCreditUsed: store_credit_applied,
+      });
+    }
 
     // Check if confirmation_token_id is actually a payment method ID (starts with pm_)
     const isPaymentMethod = confirmation_token_id?.startsWith("pm_");
@@ -537,6 +555,55 @@ router.get("/available-discounts", async (req, res) => {
     }));
 
     res.json({ discounts });
+  } catch (error: any) {
+    res.status(400).json({ error: { message: error.message } });
+  }
+});
+
+// Store credit endpoints
+// In-memory store credit storage (replace with database in production)
+const storeCreditBalances: Record<string, number> = {
+  cus_TUmiUmrxCQZ6hr: 5000, // $50.00 in cents
+};
+
+// Get store credit balance
+router.get("/store-credit/:customerId", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const balance = storeCreditBalances[customerId] || 0;
+
+    res.json({
+      customerId,
+      balance,
+      formatted: `$${(balance / 100).toFixed(2)}`,
+    });
+  } catch (error: any) {
+    res.status(400).json({ error: { message: error.message } });
+  }
+});
+
+// Deduct store credit (called after successful payment)
+router.post("/store-credit/deduct", async (req, res) => {
+  try {
+    const { customerId, amount } = req.body;
+
+    if (!storeCreditBalances[customerId]) {
+      storeCreditBalances[customerId] = 0;
+    }
+
+    if (storeCreditBalances[customerId] < amount) {
+      return res.status(400).json({
+        error: { message: "Insufficient store credit" },
+      });
+    }
+
+    storeCreditBalances[customerId] -= amount;
+
+    res.json({
+      success: true,
+      newBalance: storeCreditBalances[customerId],
+      deducted: amount,
+    });
   } catch (error: any) {
     res.status(400).json({ error: { message: error.message } });
   }
