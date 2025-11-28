@@ -153,4 +153,27 @@ router.post(
   }
 );
 
+router.post("/create-ephemeral-key", async (req: Request, res: Response) => {
+  try {
+    const { customerId } = req.body;
+
+    if (!customerId) {
+      return res.status(400).json({
+        error: { message: "customerId is required" },
+      });
+    }
+
+    const ephemeralKey = await stripeSdk.ephemeralKeys.create(
+      { customer: customerId },
+      { apiVersion: "2024-11-20.acacia" }
+    );
+
+    res.json({
+      ephemeralKey: ephemeralKey.secret,
+    });
+  } catch (error: any) {
+    res.status(400).json({ error: { message: error.message } });
+  }
+});
+
 export default router;

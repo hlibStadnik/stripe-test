@@ -41,7 +41,7 @@ export function PaymentForm({
   isProcessingExternal = false,
   isSplittingPayment = false,
 }: PaymentFormProps) {
-  const [selectedMethod, setSelectedMethod] = useState<string>("card");
+  const [isStoreCreditApplied, setIsStoreCreditApplied] = useState(false);
   const [appliedCredit, setAppliedCredit] = useState(0);
   const [finalAmount, setFinalAmount] = useState(amount);
 
@@ -113,7 +113,8 @@ export function PaymentForm({
             setup_future_usage: shouldSavePaymentMethod
               ? "off_session"
               : undefined,
-            store_credit_applied: appliedCredit,
+            store_credit_applied: isSplittingPayment ? appliedCredit : amount,
+            isSplittingPayment,
           }),
         });
 
@@ -213,19 +214,16 @@ export function PaymentForm({
       {storeCredit > 0 && (
         <TouchableOpacity
           style={[
-            selectedMethod === "storecredit" && styles.methodCardSelected,
+            isStoreCreditApplied && styles.methodCardSelected,
             {
               paddingVertical: 25,
             },
           ]}
-          onPress={() => clearPaymentOption()}
-          //   onPress={() => setSelectedMethod("storecredit")}
+          onPress={() => setIsStoreCreditApplied(!isStoreCreditApplied)}
         >
           <View style={styles.methodRow}>
             <View style={styles.radioOuter}>
-              {selectedMethod === "storecredit" && (
-                <View style={styles.radioInner} />
-              )}
+              {isStoreCreditApplied && <View style={styles.radioInner} />}
             </View>
             <Image
               source={require("@/assets/images/credit.png")}

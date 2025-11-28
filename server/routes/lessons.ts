@@ -219,12 +219,13 @@ router.post("/create-intent", async (req, res) => {
       currency = "usd",
       setup_future_usage,
       store_credit_applied = 0,
+      isSplittingPayment = false,
     } = req.body;
 
     console.log("🚀 ~ create-intent body:", req.body);
 
     // If amount is 0 after store credit, complete the order without Stripe
-    if (amount === 0 && store_credit_applied > 0) {
+    if (amount === store_credit_applied && !isSplittingPayment) {
       console.log("💰 Order fully paid with store credit");
 
       // Deduct store credit
