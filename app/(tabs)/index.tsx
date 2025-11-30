@@ -8,10 +8,11 @@ import {
   View,
   Switch,
   TextInput,
+  TouchableOpacity,
 } from "react-native";
 
 import ParallaxScrollView from "@/components/parallax-scroll-view";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PaymentForm } from "@/components/payment-form";
 import { useCustomerSession } from "@/hooks/use-customer-session";
 import { useStoreCredit } from "@/hooks/use-store-credit";
@@ -29,54 +30,55 @@ export default function HomeScreen() {
 
   // Split payment controls
   const [enableSplitPayment, setEnableSplitPayment] = useState(false);
-  const [payment1Amount, setPayment1Amount] = useState("");
-  const [payment2Amount, setPayment2Amount] = useState("");
+  const [paymentAmountA, setPaymentAmountA] = useState(moneyAmount);
+  const [paymentAmountB, setPaymentAmountB] = useState(300);
 
   // Payment confirm functions
-  const [payment1Confirm, setPayment1Confirm] = useState<
-    (() => Promise<any>) | null
-  >(null);
-  const [payment2Confirm, setPayment2Confirm] = useState<
-    (() => Promise<any>) | null
-  >(null);
+  const [confirmA, setConfirmA] = useState<(() => Promise<any>) | null>(null);
+  const [confirmB, setConfirmB] = useState<(() => Promise<any>) | null>(null);
+  const [paymentTypeA, setPaymentTypeA] = useState("");
+  const [paymentTypeB, setPaymentTypeB] = useState("");
+
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handlePayment1Change = (value: string) => {
-    setPayment1Amount(value);
+    setPaymentAmountA(value);
     const amount1 = parseFloat(value);
     if (!isNaN(amount1) && amount1 >= 0) {
       const remainingCents = moneyAmount - Math.round(amount1 * 100);
       const remaining = Math.max(0, remainingCents / 100);
-      setPayment2Amount(remaining.toFixed(2));
+      setPaymentAmountB(remaining.toFixed(2));
     }
   };
 
+  const onSplitToggle = (value: boolean) => {
+    if (!value) {
+      setPaymentAmountA(moneyAmount);
+      setPaymentAmountB(0);
+    } else {
+      const half = (moneyAmount / 2).toFixed(2);
+      setPaymentAmountA(300);
+      setPaymentAmountB(400);
+    }
+    setEnableSplitPayment(value);
+  };
+
   const handlePayment2Change = (value: string) => {
-    setPayment2Amount(value);
+    setPaymentAmountB(value);
     const amount2 = parseFloat(value);
     if (!isNaN(amount2) && amount2 >= 0) {
       const remainingCents = moneyAmount - Math.round(amount2 * 100);
       const remaining = Math.max(0, remainingCents / 100);
-      setPayment1Amount(remaining.toFixed(2));
+      setPaymentAmountA(remaining.toFixed(2));
     }
   };
 
-  const getPayment1AmountInCents = () => {
-    const amount = parseFloat(payment1Amount);
-    return !isNaN(amount) && amount > 0 ? Math.round(amount * 100) : 0;
-  };
-
-  const getPayment2AmountInCents = () => {
-    const amount = parseFloat(payment2Amount);
-    return !isNaN(amount) && amount > 0 ? Math.round(amount * 100) : 0;
-  };
-
-  const totalSplit = getPayment1AmountInCents() + getPayment2AmountInCents();
+  const totalSplit = paymentAmountA + paymentAmountB;
 
   const handlePayAll = async () => {
     if (!enableSplitPayment) {
       // Single payment mode
-      if (!payment1Confirm) {
+      if (!confirmA) {
         Alert.alert("Error", "Payment method not ready");
         return;
       }
@@ -85,7 +87,7 @@ export default function HomeScreen() {
 
       try {
         console.log("Executing Single Payment...");
-        const result = await payment1Confirm();
+        const result = await confirmA();
         if (result.status === "failed") {
           throw new Error(`Payment failed: ${result.error.message}`);
         }
@@ -101,21 +103,21 @@ export default function HomeScreen() {
     }
 
     // Split payment mode
-    if (totalSplit !== moneyAmount) {
-      Alert.alert(
-        "Error",
-        `Split payments must total exactly $${(moneyAmount / 100).toFixed(2)}`
-      );
-      return;
-    }
+    // if (totalSplit !== moneyAmount) {
+    //   Alert.alert(
+    //     "Error",
+    //     `Split payments must total exactly $${(moneyAmount / 100).toFixed(2)}`
+    //   );
+    //   return;
+    // }
 
     setIsProcessing(true);
 
     try {
       // Execute payment 1 only if amount > 0
-      if (getPayment1AmountInCents() > 0 && payment1Confirm) {
+      if (paymentAmountA > 0 && !!confirmA) {
         console.log("Executing Payment 1...");
-        const result1 = await payment1Confirm();
+        const result1 = await confirmA();
         if (result1.status === "failed") {
           throw new Error(`Payment 1 failed: ${result1.error.message}`);
         }
@@ -123,9 +125,9 @@ export default function HomeScreen() {
       }
 
       // Execute payment 2 only if amount > 0
-      if (getPayment2AmountInCents() > 0 && payment2Confirm) {
+      if (paymentAmountB > 0 && !!confirmB) {
         console.log("Executing Payment 2...");
-        const result2 = await payment2Confirm();
+        const result2 = await confirmB();
         if (result2.status === "failed") {
           throw new Error(`Payment 2 failed: ${result2.error.message}`);
         }
@@ -140,6 +142,10 @@ export default function HomeScreen() {
       setIsProcessing(false);
     }
   };
+
+  const [isStoreCreditApplied, setIsStoreCreditApplied] = useState(false);
+  const [storeCreditInput, setStoreCreditInput] = useState("");
+  const [appliedStoreCredit, setAppliedStoreCredit] = useState(0);
 
   if (!customerId || !customerSessionClientSecret) {
     return (
@@ -186,40 +192,153 @@ export default function HomeScreen() {
       </View>
 
       {/* Payment Forms */}
+      {/* {enableSplitPayment && (
+        <>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Payment 1 Amount ($)</Text>
+            <TextInput
+              style={styles.input}
+              value={paymentAmountA}
+              onChangeText={handlePayment1Change}
+              keyboardType="numeric"
+              placeholder="0.00"
+              editable={!isProcessing}
+            />
+          </View>
+        </>
+      )} */}
 
       <PaymentForm
-        amount={moneyAmount}
+        amount={paymentAmountA - appliedStoreCredit}
         customerId={customerId}
         customerSessionClientSecret={customerSessionClientSecret}
         storeCredit={storeCredit}
-        onConfirmReady={(fn) => setPayment1Confirm(() => fn)}
+        setConfirmCallback={setConfirmA}
+        total={moneyAmount}
         isProcessingExternal={isProcessing}
         isSplittingPayment={enableSplitPayment}
+        otherPaymentType={paymentTypeB}
       />
 
+      {/* Custom Store Credit Option */}
+      {/* <TouchableOpacity
+        style={[
+          isStoreCreditApplied && styles.methodCardSelected,
+          {
+            paddingVertical: 25,
+          },
+        ]}
+        onPress={() => setIsStoreCreditApplied(!isStoreCreditApplied)}
+      >
+        <View style={styles.methodRow}>
+          <View style={styles.radioOuter}>
+            {isStoreCreditApplied && <View style={styles.radioInner} />}
+          </View>
+          <Image
+            source={require("@/assets/images/credit.png")}
+            resizeMode="contain"
+            style={{ width: 20, height: 20, marginRight: 8, marginLeft: 4 }}
+          />
+          <Text>Store credit</Text>
+        </View>
+      </TouchableOpacity> */}
+
       <View style={styles.splitToggleContainer}>
-        <Text style={styles.splitLabel}>Split payment</Text>
+        <Text style={styles.splitLabel}>Use Store Credit</Text>
+        {/* <Text style={styles.splitLabel}>Split payment</Text> */}
         <Switch
-          value={enableSplitPayment}
-          disabled={true}
-          onValueChange={setEnableSplitPayment}
+          value={isStoreCreditApplied}
+          // disabled={true}
+          onValueChange={() => setIsStoreCreditApplied(!isStoreCreditApplied)}
         />
       </View>
-      {enableSplitPayment && (
-        <>
-          <Text>Todo: split with store credit</Text>
+      {/* Store Credits Input */}
+      {isStoreCreditApplied && (
+        <View style={styles.storeCreditInputContainer}>
+          <Text style={styles.inputLabel}>
+            Apply Store Credits (Available: ${(storeCredit / 100).toFixed(2)})
+          </Text>
+          <View style={styles.inputRow}>
+            <Text style={styles.currencySymbol}>$</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="0.00"
+              keyboardType="decimal-pad"
+              value={storeCreditInput}
+              onChangeText={(text) => {
+                setStoreCreditInput(text);
+                const creditAmount = Math.round(parseFloat(text || "0") * 100);
+                const maxCredit = Math.min(storeCredit, paymentAmountA);
+                const appliedStoreCredit = Math.min(creditAmount, maxCredit);
 
-          {/* <PaymentForm
-            amount={getPayment2AmountInCents()}
-            customerId={customerId}
-            customerSessionClientSecret={customerSessionClientSecret}
-            onConfirmReady={(fn) => setPayment2Confirm(() => fn)}
-            isProcessingExternal={isProcessing}
-            isSplittingPayment={enableSplitPayment}
-          /> */}
-        </>
+                setAppliedStoreCredit(appliedStoreCredit);
+              }}
+            />
+          </View>
+          {appliedStoreCredit > 0 && (
+            <View style={styles.calculationRow}>
+              <Text style={styles.calculationLabel}>Original Amount:</Text>
+              <Text style={styles.calculationValue}>
+                ${(paymentAmountA / 100).toFixed(2)}
+              </Text>
+            </View>
+          )}
+          {appliedStoreCredit > 0 && (
+            <View style={styles.calculationRow}>
+              <Text style={styles.calculationLabel}>Store Credit Applied:</Text>
+              <Text style={[styles.calculationValue, styles.creditApplied]}>
+                -${(appliedStoreCredit / 100).toFixed(2)}
+              </Text>
+            </View>
+          )}
+          {appliedStoreCredit > 0 && (
+            <View style={[styles.calculationRow, styles.totalRow]}>
+              <Text style={styles.totalLabel}>Amount to Charge:</Text>
+              <Text style={styles.totalValue}>
+                $
+                {Math.max(
+                  0,
+                  (paymentAmountA - appliedStoreCredit) / 100
+                ).toFixed(2)}
+              </Text>
+            </View>
+          )}
+        </View>
       )}
 
+      {/* {enableSplitPayment && (
+        <>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Payment 2 Amount ($)</Text>
+            <TextInput
+              style={styles.input}
+              value={paymentAmountB}
+              onChangeText={handlePayment2Change}
+              keyboardType="numeric"
+              placeholder="0.00"
+              editable={!isProcessing}
+            />
+          </View>
+
+          <PaymentForm
+            amount={paymentAmountB}
+            customerId={customerId}
+            customerSessionClientSecret={customerSessionClientSecret}
+            setConfirmCallback={setConfirmB}
+            isProcessingExternal={isProcessing}
+            isSplittingPayment={enableSplitPayment}
+            otherPaymentType={paymentTypeA}
+          />
+        </>
+      )}
+      {enableSplitPayment && (
+        <View style={styles.splitInputsContainer}>
+          <Text style={styles.totalSplitText}>
+            Total Split: ${(totalSplit / 100).toFixed(2)} / $
+            {(moneyAmount / 100).toFixed(2)}
+          </Text>
+        </View>
+      )} */}
       <View style={styles.payButtonContainer}>
         <Button title={`Pay`} onPress={handlePayAll} disabled={isProcessing} />
         {isProcessing && <ActivityIndicator size="large" />}
@@ -282,16 +401,147 @@ const styles = StyleSheet.create({
   },
   splitToggleContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
-    padding: 16,
+    // padding: 16,
   },
   splitLabel: {
     fontSize: 16,
     fontWeight: "600",
   },
+  splitInputsContainer: {
+    padding: 16,
+    backgroundColor: "#f9f9f9",
+    borderRadius: 8,
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+    color: "#333",
+  },
+  input: {
+    borderColor: "#ccc",
+    borderRadius: 4,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: "#fff",
+    width: "auto",
+  },
+  totalSplitText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#8B1A1A",
+    textAlign: "center",
+    marginTop: 8,
+  },
   payButtonContainer: {
     marginTop: 16,
     marginBottom: 24,
+  },
+  methodCardSelected: {
+    borderColor: "#4285f4",
+  },
+  methodRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#666",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  radioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#4285f4",
+  },
+  methodLabel: {
+    fontSize: 16,
+    color: "#000",
+  },
+  storeCreditBadge: {
+    backgroundColor: "#e53935",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  storeCreditText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  errorText: {
+    color: "red",
+    marginBottom: 8,
+  },
+  storeCreditInputContainer: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d0d0d0",
+    paddingHorizontal: 12,
+  },
+  currencySymbol: {
+    fontSize: 18,
+    color: "#333",
+    marginRight: 4,
+    fontWeight: "600",
+  },
+
+  calculationRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingTop: 8,
+  },
+  calculationLabel: {
+    fontSize: 14,
+    color: "#666",
+  },
+  calculationValue: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "500",
+  },
+  creditApplied: {
+    color: "#e53935",
+  },
+  totalRow: {
+    borderTopWidth: 1,
+    borderTopColor: "#d0d0d0",
+    paddingTop: 12,
+  },
+  totalLabel: {
+    fontSize: 16,
+    color: "#000",
+    fontWeight: "700",
+  },
+  totalValue: {
+    fontSize: 16,
+    color: "#4285f4",
+    fontWeight: "700",
   },
 });

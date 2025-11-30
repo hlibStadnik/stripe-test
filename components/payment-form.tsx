@@ -6,6 +6,7 @@ import {
   View,
   TouchableOpacity,
   Image,
+  TextInput,
 } from "react-native";
 
 import {
@@ -18,33 +19,34 @@ import {
   BillingDetails,
   CustomPaymentMethod,
   CustomPaymentMethodResult,
+  EmbeddedPaymentElementResult,
 } from "@stripe/stripe-react-native";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { API_URL } from "@/utils/config";
 
 interface PaymentFormProps {
   amount: number;
   customerId: string;
+  otherPaymentType?: string;
   customerSessionClientSecret: string;
   storeCredit?: number;
-  onConfirmReady?: (confirmFn: () => Promise<any>) => void;
+  setConfirmCallback?: (confirmFn: any) => void;
   isProcessingExternal?: boolean;
   isSplittingPayment?: boolean;
+  total?: number;
 }
 
 export function PaymentForm({
   amount,
   customerId,
+  otherPaymentType,
   customerSessionClientSecret,
   storeCredit = 0,
-  onConfirmReady,
+  setConfirmCallback,
   isProcessingExternal = false,
   isSplittingPayment = false,
+  total = 0,
 }: PaymentFormProps) {
-  const [isStoreCreditApplied, setIsStoreCreditApplied] = useState(false);
-  const [appliedCredit, setAppliedCredit] = useState(0);
-  const [finalAmount, setFinalAmount] = useState(amount);
-
   const [elementConfig, setElementConfig] =
     useState<EmbeddedPaymentElementConfiguration | null>({
       merchantDisplayName: "Nellis Auction",
@@ -108,13 +110,14 @@ export function PaymentForm({
           },
           body: JSON.stringify({
             confirmation_token_id: confirmationToken.id,
-            amount: finalAmount,
+            amount,
             currency: "usd",
             setup_future_usage: shouldSavePaymentMethod
               ? "off_session"
               : undefined,
-            store_credit_applied: isSplittingPayment ? appliedCredit : amount,
+            store_credit_applied: storeCredit,
             isSplittingPayment,
+            total,
           }),
         });
 
@@ -128,9 +131,9 @@ export function PaymentForm({
         if (data.paidWithStoreCredit) {
           Alert.alert(
             "Success",
-            `Payment completed with store credit! $${(
-              appliedCredit / 100
-            ).toFixed(2)} used.`
+            `Payment completed with store credit! $${(amount / 100).toFixed(
+              2
+            )} used.`
           );
           clearPaymentOption();
           return;
@@ -153,12 +156,16 @@ export function PaymentForm({
         });
       }
     },
-    [finalAmount, appliedCredit]
+    [amount, storeCredit]
   );
-  const [intentConfig, setIntentConfig] = useState<IntentConfiguration | null>({
-    confirmHandler: handleConfirm,
-    mode: { amount: finalAmount, currencyCode: "USD" },
-  });
+
+  const intentConfig = useMemo(
+    () => ({
+      confirmHandler: handleConfirm,
+      mode: { amount: amount, currencyCode: "USD" },
+    }),
+    [handleConfirm, amount]
+  );
 
   const {
     embeddedPaymentElementView,
@@ -172,14 +179,7 @@ export function PaymentForm({
   );
 
   useEffect(() => {
-    if (onConfirmReady && confirm) {
-      // Wrap confirm to ensure it's called correctly
-      const confirmWrapper = async () => {
-        return await confirm();
-      };
-      onConfirmReady(confirmWrapper);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setConfirmCallback?.(() => confirm);
   }, [confirm]);
 
   if (!intentConfig || !elementConfig) {
@@ -210,31 +210,6 @@ export function PaymentForm({
         )}
       </View>
 
-      {/* Custom Store Credit Option */}
-      {storeCredit > 0 && (
-        <TouchableOpacity
-          style={[
-            isStoreCreditApplied && styles.methodCardSelected,
-            {
-              paddingVertical: 25,
-            },
-          ]}
-          onPress={() => setIsStoreCreditApplied(!isStoreCreditApplied)}
-        >
-          <View style={styles.methodRow}>
-            <View style={styles.radioOuter}>
-              {isStoreCreditApplied && <View style={styles.radioInner} />}
-            </View>
-            <Image
-              source={require("@/assets/images/credit.png")}
-              resizeMode="contain"
-              style={{ width: 20, height: 20, marginRight: 8, marginLeft: 4 }}
-            />
-            <Text style={styles.methodLabel}>Store credit</Text>
-          </View>
-        </TouchableOpacity>
-      )}
-
       {isProcessingExternal && <ActivityIndicator size="large" />}
     </View>
   );
@@ -242,7 +217,7 @@ export function PaymentForm({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    // marginBottom: 24,
   },
   methodCard: {
     flexDirection: "row",
@@ -297,5 +272,74 @@ const styles = StyleSheet.create({
   errorText: {
     color: "red",
     marginBottom: 8,
+  },
+  storeCreditInputContainer: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 8,
+    fontWeight: "600",
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d0d0d0",
+    paddingHorizontal: 12,
+  },
+  currencySymbol: {
+    fontSize: 18,
+    color: "#333",
+    marginRight: 4,
+    fontWeight: "600",
+  },
+  input: {
+    flex: 1,
+    height: 48,
+    fontSize: 18,
+    minWidth: 100,
+    color: "#000",
+  },
+  calculationRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingTop: 8,
+  },
+  calculationLabel: {
+    fontSize: 14,
+    color: "#666",
+  },
+  calculationValue: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "500",
+  },
+  creditApplied: {
+    color: "#e53935",
+  },
+  totalRow: {
+    borderTopWidth: 1,
+    borderTopColor: "#d0d0d0",
+    paddingTop: 12,
+  },
+  totalLabel: {
+    fontSize: 16,
+    color: "#000",
+    fontWeight: "700",
+  },
+  totalValue: {
+    fontSize: 16,
+    color: "#4285f4",
+    fontWeight: "700",
   },
 });
