@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { PaymentForm } from "@/components/payment-form";
 import { useCustomerSession } from "@/hooks/use-customer-session";
 import { useStoreCredit } from "@/hooks/use-store-credit";
+import { useRouter } from "expo-router";
 
 const moneyAmount = (() => {
   const now = new Date();
@@ -25,6 +26,7 @@ const moneyAmount = (() => {
 })();
 
 export default function HomeScreen() {
+  const router = useRouter();
   const { customerId, customerSessionClientSecret } = useCustomerSession();
   const { storeCredit } = useStoreCredit(customerId);
 
@@ -54,10 +56,21 @@ export default function HomeScreen() {
         }
         if (result1.status === "canceled") {
           console.log("Payment 1 canceled:", result1);
+          return;
         }
       }
 
-      Alert.alert("Success", "All payments completed successfully!");
+      // Navigate to confirmation screen on success
+      const totalAmount = paymentAmountA - appliedStoreCredit;
+      router.push({
+        pathname: "/confirm-payment",
+        params: {
+          amount: totalAmount.toFixed(2),
+          customerName: "Jorge",
+          appointmentDate: "Sep 15, 2025, 4:00 PM",
+          location: "7400 Dean Martin Dr Suite 204\nLas Vegas, NV 89139",
+        },
+      });
     } catch (error: any) {
       console.error("Payment error:", error);
       Alert.alert("Error", error.message || "Payment failed");
@@ -249,16 +262,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  splitInputsContainer: {
-    padding: 16,
-    backgroundColor: "#f9f9f9",
-    borderRadius: 8,
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
   inputLabel: {
     fontSize: 14,
     fontWeight: "600",
@@ -273,58 +276,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     width: "auto",
   },
-  totalSplitText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#8B1A1A",
-    textAlign: "center",
-    marginTop: 8,
-  },
   payButtonContainer: {
     marginTop: 16,
     marginBottom: 24,
-  },
-  methodCardSelected: {
-    borderColor: "#4285f4",
-  },
-  methodRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  radioOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#666",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  radioInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#4285f4",
-  },
-  methodLabel: {
-    fontSize: 16,
-    color: "#000",
-  },
-  storeCreditBadge: {
-    backgroundColor: "#e53935",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  storeCreditText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  errorText: {
-    color: "red",
-    marginBottom: 8,
   },
   storeCreditInputContainer: {
     marginTop: 16,
@@ -383,5 +337,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#4285f4",
     fontWeight: "700",
+  },
+  tempButtonContainer: {
+    marginTop: 20,
+    marginBottom: 20,
   },
 });

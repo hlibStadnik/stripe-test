@@ -45,6 +45,13 @@ export default function RootLayout() {
             name="modal"
             options={{ presentation: "modal", title: "Modal" }}
           />
+          <Stack.Screen
+            name="confirm-payment"
+            options={{
+              title: "Payment Confirmation",
+              headerBackTitle: "Back",
+            }}
+          />
         </Stack>
         <StatusBar style="auto" />
       </StripeProvider>
