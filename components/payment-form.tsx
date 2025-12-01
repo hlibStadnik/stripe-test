@@ -1,28 +1,15 @@
-import {
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  Image,
-  TextInput,
-} from "react-native";
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";
 
+import { API_URL } from "@/utils/config";
 import {
-  IntentConfiguration,
   EmbeddedPaymentElementConfiguration,
+  IntentConfiguration,
   IntentCreationCallbackParams,
   IntentCreationError,
-  useEmbeddedPaymentElement,
   RowStyle,
-  BillingDetails,
-  CustomPaymentMethod,
-  CustomPaymentMethodResult,
-  EmbeddedPaymentElementResult,
+  useEmbeddedPaymentElement,
 } from "@stripe/stripe-react-native";
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { API_URL } from "@/utils/config";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface PaymentFormProps {
   amount: number;
@@ -32,19 +19,16 @@ interface PaymentFormProps {
   storeCredit?: number;
   setConfirmCallback?: (confirmFn: any) => void;
   isProcessingExternal?: boolean;
-  isSplittingPayment?: boolean;
   total?: number;
 }
 
 export function PaymentForm({
   amount,
   customerId,
-  otherPaymentType,
   customerSessionClientSecret,
   storeCredit = 0,
   setConfirmCallback,
   isProcessingExternal = false,
-  isSplittingPayment = false,
   total = 0,
 }: PaymentFormProps) {
   const [elementConfig, setElementConfig] =
@@ -82,18 +66,14 @@ export function PaymentForm({
           },
         },
       },
-      googlePay: isSplittingPayment
-        ? undefined
-        : {
-            testEnv: true,
-            merchantCountryCode: "US",
-            currencyCode: "USD",
-          },
-      applePay: isSplittingPayment
-        ? undefined
-        : {
-            merchantCountryCode: "US",
-          },
+      googlePay: {
+        testEnv: true,
+        merchantCountryCode: "US",
+        currencyCode: "USD",
+      },
+      applePay: {
+        merchantCountryCode: "US",
+      },
     });
 
   const handleConfirm = useCallback(
@@ -115,8 +95,7 @@ export function PaymentForm({
             setup_future_usage: shouldSavePaymentMethod
               ? "off_session"
               : undefined,
-            store_credit_applied: storeCredit,
-            isSplittingPayment,
+            storeCreditApplied: storeCredit,
             total,
           }),
         });
@@ -169,7 +148,6 @@ export function PaymentForm({
 
   const {
     embeddedPaymentElementView,
-    paymentOption,
     confirm,
     loadingError,
     clearPaymentOption,

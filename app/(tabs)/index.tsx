@@ -29,88 +29,18 @@ export default function HomeScreen() {
   const { storeCredit } = useStoreCredit(customerId);
 
   // Split payment controls
-  const [enableSplitPayment, setEnableSplitPayment] = useState(false);
   const [paymentAmountA, setPaymentAmountA] = useState(moneyAmount);
-  const [paymentAmountB, setPaymentAmountB] = useState(300);
 
   // Payment confirm functions
   const [confirmA, setConfirmA] = useState<(() => Promise<any>) | null>(null);
-  const [confirmB, setConfirmB] = useState<(() => Promise<any>) | null>(null);
-  const [paymentTypeA, setPaymentTypeA] = useState("");
-  const [paymentTypeB, setPaymentTypeB] = useState("");
 
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handlePayment1Change = (value: string) => {
-    setPaymentAmountA(value);
-    const amount1 = parseFloat(value);
-    if (!isNaN(amount1) && amount1 >= 0) {
-      const remainingCents = moneyAmount - Math.round(amount1 * 100);
-      const remaining = Math.max(0, remainingCents / 100);
-      setPaymentAmountB(remaining.toFixed(2));
-    }
-  };
-
-  const onSplitToggle = (value: boolean) => {
-    if (!value) {
-      setPaymentAmountA(moneyAmount);
-      setPaymentAmountB(0);
-    } else {
-      const half = (moneyAmount / 2).toFixed(2);
-      setPaymentAmountA(300);
-      setPaymentAmountB(400);
-    }
-    setEnableSplitPayment(value);
-  };
-
-  const handlePayment2Change = (value: string) => {
-    setPaymentAmountB(value);
-    const amount2 = parseFloat(value);
-    if (!isNaN(amount2) && amount2 >= 0) {
-      const remainingCents = moneyAmount - Math.round(amount2 * 100);
-      const remaining = Math.max(0, remainingCents / 100);
-      setPaymentAmountA(remaining.toFixed(2));
-    }
-  };
-
-  const totalSplit = paymentAmountA + paymentAmountB;
+  const [isStoreCreditApplied, setIsStoreCreditApplied] = useState(false);
+  const [storeCreditInput, setStoreCreditInput] = useState("");
+  const [appliedStoreCredit, setAppliedStoreCredit] = useState(0);
 
   const handlePayAll = async () => {
-    if (!enableSplitPayment) {
-      // Single payment mode
-      if (!confirmA) {
-        Alert.alert("Error", "Payment method not ready");
-        return;
-      }
-
-      setIsProcessing(true);
-
-      try {
-        console.log("Executing Single Payment...");
-        const result = await confirmA();
-        if (result.status === "failed") {
-          throw new Error(`Payment failed: ${result.error.message}`);
-        }
-        console.log("Payment completed:", result.status);
-        Alert.alert("Success", "Payment completed successfully!");
-      } catch (error: any) {
-        console.error("Payment error:", error);
-        Alert.alert("Error", error.message || "Payment failed");
-      } finally {
-        setIsProcessing(false);
-      }
-      return;
-    }
-
-    // Split payment mode
-    // if (totalSplit !== moneyAmount) {
-    //   Alert.alert(
-    //     "Error",
-    //     `Split payments must total exactly $${(moneyAmount / 100).toFixed(2)}`
-    //   );
-    //   return;
-    // }
-
     setIsProcessing(true);
 
     try {
@@ -118,20 +48,13 @@ export default function HomeScreen() {
       if (paymentAmountA > 0 && !!confirmA) {
         console.log("Executing Payment 1...");
         const result1 = await confirmA();
+        console.log("🚀 ~ handlePayAll ~ result1:", result1);
         if (result1.status === "failed") {
           throw new Error(`Payment 1 failed: ${result1.error.message}`);
         }
-        console.log("Payment 1 completed:", result1.status);
-      }
-
-      // Execute payment 2 only if amount > 0
-      if (paymentAmountB > 0 && !!confirmB) {
-        console.log("Executing Payment 2...");
-        const result2 = await confirmB();
-        if (result2.status === "failed") {
-          throw new Error(`Payment 2 failed: ${result2.error.message}`);
+        if (result1.status === "canceled") {
+          console.log("Payment 1 canceled:", result1);
         }
-        console.log("Payment 2 completed:", result2.status);
       }
 
       Alert.alert("Success", "All payments completed successfully!");
@@ -142,10 +65,6 @@ export default function HomeScreen() {
       setIsProcessing(false);
     }
   };
-
-  const [isStoreCreditApplied, setIsStoreCreditApplied] = useState(false);
-  const [storeCreditInput, setStoreCreditInput] = useState("");
-  const [appliedStoreCredit, setAppliedStoreCredit] = useState(0);
 
   if (!customerId || !customerSessionClientSecret) {
     return (
@@ -191,68 +110,23 @@ export default function HomeScreen() {
         </Text>
       </View>
 
-      {/* Payment Forms */}
-      {/* {enableSplitPayment && (
-        <>
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Payment 1 Amount ($)</Text>
-            <TextInput
-              style={styles.input}
-              value={paymentAmountA}
-              onChangeText={handlePayment1Change}
-              keyboardType="numeric"
-              placeholder="0.00"
-              editable={!isProcessing}
-            />
-          </View>
-        </>
-      )} */}
-
       <PaymentForm
         amount={paymentAmountA - appliedStoreCredit}
         customerId={customerId}
         customerSessionClientSecret={customerSessionClientSecret}
-        storeCredit={storeCredit}
+        storeCredit={appliedStoreCredit}
         setConfirmCallback={setConfirmA}
         total={moneyAmount}
         isProcessingExternal={isProcessing}
-        isSplittingPayment={enableSplitPayment}
-        otherPaymentType={paymentTypeB}
       />
-
-      {/* Custom Store Credit Option */}
-      {/* <TouchableOpacity
-        style={[
-          isStoreCreditApplied && styles.methodCardSelected,
-          {
-            paddingVertical: 25,
-          },
-        ]}
-        onPress={() => setIsStoreCreditApplied(!isStoreCreditApplied)}
-      >
-        <View style={styles.methodRow}>
-          <View style={styles.radioOuter}>
-            {isStoreCreditApplied && <View style={styles.radioInner} />}
-          </View>
-          <Image
-            source={require("@/assets/images/credit.png")}
-            resizeMode="contain"
-            style={{ width: 20, height: 20, marginRight: 8, marginLeft: 4 }}
-          />
-          <Text>Store credit</Text>
-        </View>
-      </TouchableOpacity> */}
 
       <View style={styles.splitToggleContainer}>
         <Text style={styles.splitLabel}>Use Store Credit</Text>
-        {/* <Text style={styles.splitLabel}>Split payment</Text> */}
         <Switch
           value={isStoreCreditApplied}
-          // disabled={true}
           onValueChange={() => setIsStoreCreditApplied(!isStoreCreditApplied)}
         />
       </View>
-      {/* Store Credits Input */}
       {isStoreCreditApplied && (
         <View style={styles.storeCreditInputContainer}>
           <Text style={styles.inputLabel}>
@@ -306,42 +180,8 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* {enableSplitPayment && (
-        <>
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Payment 2 Amount ($)</Text>
-            <TextInput
-              style={styles.input}
-              value={paymentAmountB}
-              onChangeText={handlePayment2Change}
-              keyboardType="numeric"
-              placeholder="0.00"
-              editable={!isProcessing}
-            />
-          </View>
-
-          <PaymentForm
-            amount={paymentAmountB}
-            customerId={customerId}
-            customerSessionClientSecret={customerSessionClientSecret}
-            setConfirmCallback={setConfirmB}
-            isProcessingExternal={isProcessing}
-            isSplittingPayment={enableSplitPayment}
-            otherPaymentType={paymentTypeA}
-          />
-        </>
-      )}
-      {enableSplitPayment && (
-        <View style={styles.splitInputsContainer}>
-          <Text style={styles.totalSplitText}>
-            Total Split: ${(totalSplit / 100).toFixed(2)} / $
-            {(moneyAmount / 100).toFixed(2)}
-          </Text>
-        </View>
-      )} */}
       <View style={styles.payButtonContainer}>
         <Button title={`Pay`} onPress={handlePayAll} disabled={isProcessing} />
-        {isProcessing && <ActivityIndicator size="large" />}
       </View>
     </ParallaxScrollView>
   );

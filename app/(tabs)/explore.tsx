@@ -19,6 +19,7 @@ import { useState } from "react";
 
 export default function TabTwoScreen() {
   const { customerId, customerSessionClientSecret } = useCustomerSession();
+
   const [isInitializingWallet, setIsInitializingWallet] = useState(false);
 
   const openWallet = async () => {
@@ -52,11 +53,19 @@ export default function TabTwoScreen() {
       ]);
 
       if (!ephemeralKeyResponse.ok || !setupIntentResponse.ok) {
+        const errorData = await setupIntentResponse.json();
+        console.error("🚀 ~ openWallet ~ error:", errorData);
         throw new Error("Failed to initialize wallet");
       }
 
       const ephemeralKeyData = await ephemeralKeyResponse.json();
       const setupIntentData = await setupIntentResponse.json();
+
+      console.log(
+        "🚀 ~ openWallet ~ ephemeralKeyData, setupIntentData:",
+        ephemeralKeyData,
+        setupIntentData
+      );
 
       // Initialize CustomerSheet
       const { error: initError } = await CustomerSheet.initialize({

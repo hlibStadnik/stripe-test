@@ -3,11 +3,13 @@ import { existsSync } from "fs";
 import { Router, Request, Response } from "express";
 import { stripeSdk } from "../clients/stripe";
 
+// Store credit endpoints
+// In-memory store credit storage (replace with database in production)
+const storeCreditBalances: Record<string, number> = {
+  cus_TUmiUmrxCQZ6hr: 5000, // $50.00 in cents
+};
+
 const router = Router();
-interface User {
-  name: string;
-  email: string;
-}
 
 router.post("/create-intent", async (req, res) => {
   const customer_id = "cus_TUmiUmrxCQZ6hr";
@@ -18,32 +20,30 @@ router.post("/create-intent", async (req, res) => {
       amount,
       currency = "usd",
       setup_future_usage,
-      store_credit_applied = 0,
-      isSplittingPayment = false,
+      storeCreditApplied = 0,
       total = 0,
     } = req.body;
     console.log("🚀 ~ req.body:", req.body);
 
     // If amount is 0 after store credit, complete the order without Stripe
-    if (amount === store_credit_applied && !isSplittingPayment) {
+    if (total === storeCreditApplied) {
       console.log("💰 Order fully paid with store credit");
 
       // Deduct store credit
       if (storeCreditBalances[customer_id]) {
-        storeCreditBalances[customer_id] -= store_credit_applied;
+        storeCreditBalances[customer_id] -= storeCreditApplied;
       }
 
       return res.json({
         success: true,
         paidWithStoreCredit: true,
         amount: 0,
-        storeCreditUsed: store_credit_applied,
+        storeCreditUsed: storeCreditApplied,
       });
     }
 
     // Check if confirmation_token_id is actually a payment method ID (starts with pm_)
     const isPaymentMethod = confirmation_token_id?.startsWith("pm_");
-    const isConfirmationToken = confirmation_token_id?.startsWith("ctoken_");
 
     var args: any = {
       amount,
@@ -52,9 +52,9 @@ router.post("/create-intent", async (req, res) => {
       customer: customer_id,
       return_url: "com.nellis.stripe://stripe-redirect",
       description:
-        "Payment for order XYZ, used store credit: " + store_credit_applied,
+        "Payment for order XYZ, used store credit: " + storeCreditApplied,
       metadata: {
-        store_credit_applied: store_credit_applied.toString(),
+        store_credit_applied: storeCreditApplied.toString(),
         total: total.toString(),
       },
     };
@@ -91,25 +91,8 @@ router.post("/create-intent", async (req, res) => {
         );
         args.payment_method = confirmation_token_id;
       }
-    } else if (isConfirmationToken) {
-      // Using a new payment method with confirmation token
-      console.log(
-        "🆕 Using new card with confirmation token:",
-        confirmation_token_id
-      );
-      args.confirmation_token = confirmation_token_id;
-      args.automatic_payment_methods = { enabled: true };
-      if (setup_future_usage) {
-        console.log(
-          "💾 Saving card for future use with setup_future_usage:",
-          setup_future_usage
-        );
-        args.setup_future_usage = setup_future_usage;
-      } else {
-        console.log("⚠️ No setup_future_usage - card will NOT be saved");
-      }
     } else {
-      throw new Error("Invalid payment method or confirmation token");
+      throw new Error("Invalid payment method");
     }
 
     console.log("📋 Final payment intent args:", JSON.stringify(args, null, 2));
@@ -125,43 +108,6 @@ router.post("/create-intent", async (req, res) => {
 
     // If this was a new card, we need to ensure the payment method is attached to customer
     // When using confirmation_token with confirm:true, the payment method is created but may not be attached
-    if (
-      isConfirmationToken &&
-      setup_future_usage &&
-      intent.payment_method &&
-      intent.status === "succeeded"
-    ) {
-      try {
-        const pmId =
-          typeof intent.payment_method === "string"
-            ? intent.payment_method
-            : intent.payment_method.id;
-
-        // Check if payment method is already attached to customer
-        const pm = await stripeSdk.paymentMethods.retrieve(pmId);
-        console.log("💳 Payment method details:", {
-          id: pm.id,
-          customer: pm.customer,
-          attached: !!pm.customer,
-        });
-
-        if (!pm.customer) {
-          console.log("🔗 Attaching payment method to customer:", pmId);
-          await stripeSdk.paymentMethods.attach(pmId, {
-            customer: customer_id,
-          });
-          console.log("✅ Payment method attached to customer successfully");
-        } else {
-          console.log("✅ Payment method already attached to customer");
-        }
-      } catch (attachError: any) {
-        console.error(
-          "⚠️ Warning: Failed to attach payment method:",
-          attachError.message
-        );
-        // Don't fail the whole request if attachment fails
-      }
-    }
 
     const resResult = {
       client_secret: intent.client_secret,
@@ -195,12 +141,6 @@ router.post("/create-setup-intent", async (req, res) => {
   }
 });
 
-// Store credit endpoints
-// In-memory store credit storage (replace with database in production)
-const storeCreditBalances: Record<string, number> = {
-  cus_TUmiUmrxCQZ6hr: 5000, // $50.00 in cents
-};
-
 // Get store credit balance
 router.get("/store-credit/:customerId", async (req, res) => {
   try {
@@ -211,33 +151,6 @@ router.get("/store-credit/:customerId", async (req, res) => {
       customerId,
       balance,
       formatted: `$${(balance / 100).toFixed(2)}`,
-    });
-  } catch (error: any) {
-    res.status(400).json({ error: { message: error.message } });
-  }
-});
-
-// Deduct store credit (called after successful payment)
-router.post("/store-credit/deduct", async (req, res) => {
-  try {
-    const { customerId, amount } = req.body;
-
-    if (!storeCreditBalances[customerId]) {
-      storeCreditBalances[customerId] = 0;
-    }
-
-    if (storeCreditBalances[customerId] < amount) {
-      return res.status(400).json({
-        error: { message: "Insufficient store credit" },
-      });
-    }
-
-    storeCreditBalances[customerId] -= amount;
-
-    res.json({
-      success: true,
-      newBalance: storeCreditBalances[customerId],
-      deducted: amount,
     });
   } catch (error: any) {
     res.status(400).json({ error: { message: error.message } });
@@ -273,11 +186,24 @@ router.post("/payment-sheet", async (req, res) => {
   }
 });
 
-// Get Stripe config (publishable key)
-router.get("/config", async (req, res) => {
+router.post("/create-ephemeral-key", async (req: Request, res: Response) => {
   try {
+    const { customerId } = req.body;
+    console.log("🚀 ~ req.body:", req.body);
+
+    if (!customerId) {
+      return res.status(400).json({
+        error: { message: "customerId is required" },
+      });
+    }
+
+    const ephemeralKey = await stripeSdk.ephemeralKeys.create(
+      { customer: customerId },
+      { apiVersion: "2024-11-20.acacia" }
+    );
+
     res.json({
-      key: process.env.STRIPE_PUBLISHABLE_KEY || "",
+      ephemeralKey: ephemeralKey.secret,
     });
   } catch (error: any) {
     res.status(400).json({ error: { message: error.message } });

@@ -3,9 +3,7 @@ import { resolve } from "path";
 import cors from "cors";
 import { existsSync } from "fs";
 import { Request, Response, NextFunction } from "express";
-import lessonsRouter from "./routes/lessons";
-import accountRouter from "./routes/account";
-import reportingRouter from "./routes/reporting";
+import stripeRouter from "./routes/stripe.js";
 
 // Express
 import express, { json } from "express";
@@ -16,61 +14,14 @@ const app = express();
 if (!process.env.STATIC_DIR) throw Error("STATIC_DIR not set");
 app.use(express.static(process.env.STATIC_DIR));
 
-app.use(
-  express.json({
-    // Should use middleware or a function to compute it only when
-    // hitting the Stripe webhook endpoint.
-    verify: (req: Request, res: Response, buf: Buffer) => {
-      if (req.originalUrl.startsWith("/webhook")) {
-        req.body = buf.toString();
-        handleHook(req, res);
-      }
-    },
-  })
-);
 app.use(cors({ origin: true }));
-
-const handleHook = (request: Request, response: Response) => {
-  const sig = request.headers["stripe-signature"];
-  const body = request.body;
-
-  let event = null;
-
-  try {
-    event = stripeSdk.webhooks.constructEvent(
-      request.body,
-      sig!,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
-  } catch (err) {
-    // invalid signature
-    response.status(400).end();
-    return;
-  }
-
-  let intent = null;
-  switch (event["type"]) {
-    case "setup_intent.succeeded":
-      intent = event.data.object;
-
-      break;
-    case "setup_intent.setup_failed":
-      intent = event.data.object;
-
-      console.log("Failed:", intent.id);
-      break;
-  }
-
-  // response.sendStatus(200);
-};
+app.use(json()); // Parse JSON request bodies
 
 // const asyncMiddleware = fn => (req, res, next) => {
 //   Promise.resolve(fn(req, res, next)).catch(next);
 // };
 
-app.use(accountRouter);
-app.use(lessonsRouter);
-app.use(reportingRouter);
+app.use(stripeRouter);
 
 // Routes
 app.get("/", (req: Request, res: Response) => {
