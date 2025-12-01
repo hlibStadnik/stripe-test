@@ -14,7 +14,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Fonts } from "@/constants/theme";
 import { useCustomerSession } from "@/hooks/use-customer-session";
 import { CustomerSheet } from "@stripe/stripe-react-native";
-import { API_URL } from "@/utils/config";
+import { createEphemeralKey, createSetupIntent } from "@/utils/stripe";
 import { useState } from "react";
 
 export default function TabTwoScreen() {
@@ -31,35 +31,14 @@ export default function TabTwoScreen() {
     setIsInitializingWallet(true);
     try {
       // Create ephemeral key and setup intent
-      const [ephemeralKeyResponse, setupIntentResponse] = await Promise.all([
-        fetch(`${API_URL}/create-ephemeral-key`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            customerId: customerId,
-          }),
-        }),
-        fetch(`${API_URL}/create-setup-intent`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            customerId: customerId,
-          }),
-        }),
+      const [ephemeralKeyData, setupIntentData] = await Promise.all([
+        createEphemeralKey(customerId),
+        createSetupIntent(customerId),
       ]);
 
-      if (!ephemeralKeyResponse.ok || !setupIntentResponse.ok) {
-        const errorData = await setupIntentResponse.json();
-        console.error("🚀 ~ openWallet ~ error:", errorData);
+      if (!ephemeralKeyData || !setupIntentData) {
         throw new Error("Failed to initialize wallet");
       }
-
-      const ephemeralKeyData = await ephemeralKeyResponse.json();
-      const setupIntentData = await setupIntentResponse.json();
 
       console.log(
         "🚀 ~ openWallet ~ ephemeralKeyData, setupIntentData:",

@@ -1,6 +1,6 @@
 import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";
 
-import { API_URL } from "@/utils/config";
+import { createPaymentIntent } from "@/utils/stripe";
 import {
   EmbeddedPaymentElementConfiguration,
   IntentConfiguration,
@@ -83,29 +83,16 @@ export function PaymentForm({
       intentCreationCallback: (params: IntentCreationCallbackParams) => void
     ) => {
       try {
-        const response = await fetch(`${API_URL}/create-intent`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            confirmation_token_id: confirmationToken.id,
-            amount,
-            currency: "usd",
-            setup_future_usage: shouldSavePaymentMethod
-              ? "off_session"
-              : undefined,
-            storeCreditApplied: storeCredit,
-            total,
-          }),
+        const data = await createPaymentIntent({
+          confirmation_token_id: confirmationToken.id,
+          amount,
+          currency: "usd",
+          setup_future_usage: shouldSavePaymentMethod
+            ? "off_session"
+            : undefined,
+          storeCreditApplied: storeCredit,
+          total,
         });
-
-        if (!response.ok) {
-          const errorData = await response.text();
-          throw new Error(`Server error: ${response.status}`);
-        }
-
-        const data = await response.json();
 
         if (data.paidWithStoreCredit) {
           Alert.alert(
