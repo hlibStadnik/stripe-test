@@ -2,18 +2,17 @@ import { Image } from "expo-image";
 import {
   ActivityIndicator,
   Alert,
-  Button,
   StyleSheet,
   Text,
   View,
   Switch,
   TextInput,
-  TouchableOpacity,
 } from "react-native";
 
 import ParallaxScrollView from "@/components/parallax-scroll-view";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PaymentForm } from "@/components/payment-form";
+import { PickupSummary } from "@/components/pickup-summary";
 import { useCustomerSession } from "@/hooks/use-customer-session";
 import { useStoreCredit } from "@/hooks/use-store-credit";
 import { useRouter } from "expo-router";
@@ -30,9 +29,6 @@ export default function HomeScreen() {
   const { customerId, customerSessionClientSecret } = useCustomerSession();
   const { storeCredit } = useStoreCredit(customerId);
 
-  // Split payment controls
-  const [paymentAmountA, setPaymentAmountA] = useState(moneyAmount);
-
   // Payment confirm functions
   const [confirmA, setConfirmA] = useState<(() => Promise<any>) | null>(null);
 
@@ -47,7 +43,7 @@ export default function HomeScreen() {
 
     try {
       // Execute payment 1 only if amount > 0
-      if (paymentAmountA > 0 && !!confirmA) {
+      if (moneyAmount > 0 && !!confirmA) {
         console.log("Executing Payment 1...");
         const result1 = await confirmA();
         console.log("🚀 ~ handlePayAll ~ result1:", result1);
@@ -61,7 +57,7 @@ export default function HomeScreen() {
       }
 
       // Navigate to confirmation screen on success
-      const totalAmount = paymentAmountA - appliedStoreCredit;
+      const totalAmount = moneyAmount - appliedStoreCredit;
       router.push({
         pathname: "/confirm-payment",
         params: {
@@ -124,7 +120,7 @@ export default function HomeScreen() {
       </View>
 
       <PaymentForm
-        amount={paymentAmountA - appliedStoreCredit}
+        amount={moneyAmount - appliedStoreCredit}
         customerId={customerId}
         customerSessionClientSecret={customerSessionClientSecret}
         storeCredit={appliedStoreCredit}
@@ -155,7 +151,7 @@ export default function HomeScreen() {
               onChangeText={(text) => {
                 setStoreCreditInput(text);
                 const creditAmount = Math.round(parseFloat(text || "0") * 100);
-                const maxCredit = Math.min(storeCredit, paymentAmountA);
+                const maxCredit = Math.min(storeCredit, moneyAmount);
                 const appliedStoreCredit = Math.min(creditAmount, maxCredit);
 
                 setAppliedStoreCredit(appliedStoreCredit);
@@ -166,7 +162,7 @@ export default function HomeScreen() {
             <View style={styles.calculationRow}>
               <Text style={styles.calculationLabel}>Original Amount:</Text>
               <Text style={styles.calculationValue}>
-                ${(paymentAmountA / 100).toFixed(2)}
+                ${(moneyAmount / 100).toFixed(2)}
               </Text>
             </View>
           )}
@@ -183,19 +179,37 @@ export default function HomeScreen() {
               <Text style={styles.totalLabel}>Amount to Charge:</Text>
               <Text style={styles.totalValue}>
                 $
-                {Math.max(
-                  0,
-                  (paymentAmountA - appliedStoreCredit) / 100
-                ).toFixed(2)}
+                {Math.max(0, (moneyAmount - appliedStoreCredit) / 100).toFixed(
+                  2
+                )}
               </Text>
             </View>
           )}
         </View>
       )}
 
-      <View style={styles.payButtonContainer}>
-        <Button title={`Pay`} onPress={handlePayAll} disabled={isProcessing} />
-      </View>
+      <PickupSummary
+        items={[
+          {
+            id: "1",
+            name: "1 Weber 15301001 Performer",
+            description: "Charcoal Grill, 22-Inch, Black",
+          },
+        ]}
+        pickupDate="Wed Jul 23, 3:30 PM"
+        location={{
+          address: "4031 Market Center Dr Suite 303",
+          city: "North Las Vegas",
+          state: "NV",
+          zip: "8903",
+        }}
+        subtotal={moneyAmount}
+        buyerPremium={0}
+        tax={0}
+        onPay={handlePayAll}
+        isProcessing={isProcessing}
+        onChangeDate={() => console.log("Change date")}
+      />
     </ParallaxScrollView>
   );
 }
@@ -275,10 +289,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: "#fff",
     width: "auto",
-  },
-  payButtonContainer: {
-    marginTop: 16,
-    marginBottom: 24,
   },
   storeCreditInputContainer: {
     marginTop: 16,
