@@ -13,6 +13,7 @@ import ParallaxScrollView from "@/components/parallax-scroll-view";
 import { useState } from "react";
 import { PaymentForm } from "@/components/payment-form";
 import { PickupSummary } from "@/components/pickup-summary";
+import { Stepper } from "@/components/stepper";
 import { useCustomerSession } from "@/hooks/use-customer-session";
 import { useStoreCredit } from "@/hooks/use-store-credit";
 import { useRouter } from "expo-router";
@@ -103,12 +104,30 @@ export default function HomeScreen() {
         />
       }
     >
+      {/* Stepper */}
+      <Stepper
+        steps={[
+          { label: "Appointment time", completed: true },
+          { label: "Payment", completed: false },
+        ]}
+        currentStep={1}
+      />
       <View style={styles.headerContainer}>
         <Text style={styles.locationText}>North Las Vegas</Text>
-        <Text style={styles.pickupsText}>Pick Ups 1</Text>
-        <Text style={styles.totalText}>
-          Total ${(moneyAmount / 100).toFixed(2)}
-        </Text>
+        <View
+          style={{
+            flexDirection: "row",
+            flex: 1,
+            justifyContent: "flex-end",
+            flexWrap: "nowrap",
+            alignItems: "center",
+          }}
+        >
+          <Text style={styles.pickupsText}>Pick Ups 1</Text>
+          <Text style={styles.totalText}>
+            Total ${(moneyAmount / 100).toFixed(2)}
+          </Text>
+        </View>
       </View>
 
       {/* Payment Methods Section */}
@@ -226,8 +245,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 16,
-    backgroundColor: "#f5f5f5",
+    padding: 10,
     borderTopWidth: 2,
     borderBottomWidth: 2,
     borderColor: "#666",
