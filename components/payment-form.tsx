@@ -84,7 +84,7 @@ export function PaymentForm({
     ) => {
       try {
         const data = await createPaymentIntent({
-          confirmation_token_id: confirmationToken.id,
+          paymentMethodId: confirmationToken.id,
           amount,
           currency: "usd",
           setup_future_usage: shouldSavePaymentMethod

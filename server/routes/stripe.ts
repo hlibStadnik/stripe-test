@@ -12,11 +12,11 @@ const storeCreditBalances: Record<string, number> = {
 const router = Router();
 
 router.post("/create-intent", async (req, res) => {
-  const customer_id = "cus_TUmiUmrxCQZ6hr";
+  const customer_id = "cus_TUmiUmrxCQZ6hr"; //stripe customer ID
 
   try {
     const {
-      confirmation_token_id,
+      paymentMethodId,
       amount,
       currency = "usd",
       setup_future_usage,
@@ -42,15 +42,15 @@ router.post("/create-intent", async (req, res) => {
       });
     }
 
-    // Check if confirmation_token_id is actually a payment method ID (starts with pm_)
-    const isPaymentMethod = confirmation_token_id?.startsWith("pm_");
-
     var args: any = {
       amount,
       currency,
       confirm: true,
       customer: customer_id,
       return_url: "com.nellis.stripe://stripe-redirect",
+      payment_method: paymentMethodId,
+      setup_future_usage,
+      // Add metadata and description for clarity
       description:
         "Payment for order XYZ, used store credit: " + storeCreditApplied,
       metadata: {
@@ -58,86 +58,19 @@ router.post("/create-intent", async (req, res) => {
         total: total.toString(),
       },
     };
+    console.log("🚀 ~ args:", args);
 
-    if (isPaymentMethod) {
-      // Check if this is a new payment method that needs to be attached
-      const pm = await stripeSdk.paymentMethods.retrieve(confirmation_token_id);
-
-      if (!pm.customer && setup_future_usage) {
-        // This is a NEW payment method that needs to be saved
-        console.log(
-          "🆕 New payment method to be saved:",
-          confirmation_token_id
-        );
-
-        // Attach it to the customer BEFORE creating the payment intent
-        await stripeSdk.paymentMethods.attach(confirmation_token_id, {
-          customer: customer_id,
-        });
-        console.log("✅ Payment method attached to customer");
-
-        args.payment_method = confirmation_token_id;
-        args.setup_future_usage = setup_future_usage;
-      } else if (pm.customer) {
-        // This is an existing saved payment method
-        console.log("📌 Using saved payment method:", confirmation_token_id);
-        args.payment_method = confirmation_token_id;
-        args.off_session = true;
-      } else {
-        // New payment method but user doesn't want to save it
-        console.log(
-          "🔓 Using payment method without saving:",
-          confirmation_token_id
-        );
-        args.payment_method = confirmation_token_id;
-      }
-    } else {
-      throw new Error("Invalid payment method");
-    }
-
-    console.log("📋 Final payment intent args:", JSON.stringify(args, null, 2));
     const intent = await stripeSdk.paymentIntents.create(args);
     console.log("🚀 ~ intent:", intent);
-    console.log("✅ Payment intent created successfully:", {
-      id: intent.id,
-      status: intent.status,
-      payment_method: intent.payment_method,
-      setup_future_usage: intent.setup_future_usage,
-      customer: intent.customer,
-    });
-
-    // If this was a new card, we need to ensure the payment method is attached to customer
-    // When using confirmation_token with confirm:true, the payment method is created but may not be attached
 
     const resResult = {
-      client_secret: intent.client_secret,
       clientSecret: intent.client_secret,
     };
-    console.log("🚀 ~ resResult:", resResult);
 
     res.json(resResult);
   } catch (err: any) {
     console.error("❌ Error creating intent:", err.message);
     res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
-
-// For supporting customer-saved payment methods (optional)
-router.post("/create-setup-intent", async (req, res) => {
-  try {
-    const { customerId } = req.body;
-
-    // Create a SetupIntent
-    const setupIntent = await stripeSdk.setupIntents.create({
-      customer: customerId,
-      payment_method_types: ["card"],
-    });
-
-    res.json({
-      clientSecret: setupIntent.client_secret,
-    });
-  } catch (error: any) {
-    res.status(400).json({ error: { message: error.message } });
   }
 });
 
@@ -180,6 +113,25 @@ router.post("/payment-sheet", async (req, res) => {
     res.json({
       customerSessionClientSecret: customerSession.client_secret,
       customer: customer_id,
+    });
+  } catch (error: any) {
+    res.status(400).json({ error: { message: error.message } });
+  }
+});
+
+// For supporting customer-saved payment methods (optional)
+router.post("/create-setup-intent", async (req, res) => {
+  try {
+    const { customerId } = req.body;
+
+    // Create a SetupIntent
+    const setupIntent = await stripeSdk.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ["card"],
+    });
+
+    res.json({
+      clientSecret: setupIntent.client_secret,
     });
   } catch (error: any) {
     res.status(400).json({ error: { message: error.message } });

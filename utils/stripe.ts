@@ -119,7 +119,7 @@ export async function createSetupIntent(
 }
 
 export interface CreatePaymentIntentParams {
-  confirmation_token_id: string;
+  paymentMethodId: string;
   amount: number;
   currency: string;
   setup_future_usage?: string;
