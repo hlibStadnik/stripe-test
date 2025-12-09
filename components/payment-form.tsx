@@ -130,7 +130,7 @@ export function PaymentForm({
       confirmHandler: handleConfirm,
       mode: { amount: amount, currencyCode: "USD" },
     }),
-    [handleConfirm, amount]
+    [handleConfirm]
   );
 
   const {
@@ -138,10 +138,25 @@ export function PaymentForm({
     confirm,
     loadingError,
     clearPaymentOption,
+    update,
   } = useEmbeddedPaymentElement(
     intentConfig as IntentConfiguration,
     elementConfig as EmbeddedPaymentElementConfiguration
   );
+
+  useEffect(() => {
+    if (storeCredit <= 0) {
+      return;
+    }
+    const newAmount = amount - storeCredit;
+    if (newAmount > 0) {
+      console.log("🚀 ~ StripeWrapper ~ newAmount:", newAmount);
+      update({
+        confirmHandler: handleConfirm,
+        mode: { amount: newAmount, currencyCode: "USD" },
+      });
+    }
+  }, [amount, handleConfirm, update, storeCredit]);
 
   useEffect(() => {
     setConfirmCallback?.(() => confirm);

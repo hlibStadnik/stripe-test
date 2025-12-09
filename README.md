@@ -1,50 +1,252 @@
-# Welcome to your Expo app 👋
+# Stripe Expo App 💳
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+This is an [Expo](https://expo.dev) project with Stripe integration for payment processing, featuring store credit and discount functionality.
 
-## Get started
+## Prerequisites
 
-1. Install dependencies
+- Node.js v10 or higher
+- npm or yarn
+- Expo CLI
+- Stripe account with API keys
+- For Android: Android Studio and Android emulator (optional)
+- For iOS: Xcode and iOS simulator (macOS only, optional)
 
-   ```bash
-   npm install
-   ```
+## Project Structure
 
-2. Start the app
+```
+stripe/                    # React Native mobile app
+├── app/                  # Expo Router pages
+├── components/           # React components
+├── server/              # Backend Express API
+├── utils/               # Utility functions and config
+└── package.json
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+server/                   # Backend API
+├── routes/              # API routes
+├── clients/             # Stripe client setup
+└── package.json
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Setup Instructions
 
-## Learn more
+### 1. Backend Server Setup
 
-To learn more about developing your project with Expo, look at the following resources:
+#### Step 1: Navigate to the server directory
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+cd server
+```
 
-## Join the community
+#### Step 2: Install dependencies
 
-Join our community of developers creating universal apps.
+```bash
+npm install
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+#### Step 3: Configure environment variables
+
+Create a `.env` file in the `server` directory by copying the example:
+
+```bash
+copy .env.example .env
+```
+
+Edit the `.env` file with your Stripe credentials:
+
+```dotenv
+# Stripe keys (Get these from https://dashboard.stripe.com/apikeys)
+STRIPE_PUBLISHABLE_KEY=pk_test_your_publishable_key_here
+STRIPE_SECRET_KEY=sk_test_your_secret_key_here
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+
+# Environment variables
+STATIC_DIR=../client
+DOMAIN=http://localhost:4242
+PORT=4242
+
+CI=false
+CHALLENGE_ID=random-bronze-sloth
+```
+
+**Important:** Replace the placeholder values with your actual Stripe API keys from your [Stripe Dashboard](https://dashboard.stripe.com/apikeys).
+
+#### Step 4: Start the backend server
+
+```bash
+npm start
+```
+
+The server will run on `http://localhost:4242` by default.
+
+For development with auto-reload:
+
+```bash
+npm run dev
+```
+
+### 2. Mobile App Setup
+
+#### Step 1: Navigate to the mobile app directory
+
+```bash
+cd ..
+# Or from project root: cd stripe
+```
+
+#### Step 2: Install dependencies
+
+```bash
+npm install
+```
+
+#### Step 3: Configure API URL
+
+Edit the file `utils/config.ts` to point to your backend server:
+
+**For Android Emulator:**
+
+```typescript
+export const API_URL = "http://10.0.2.2:4242";
+```
+
+**For iOS Simulator:**
+
+```typescript
+export const API_URL = "http://localhost:4242";
+```
+
+**For Physical Device:**
+
+Find your computer's local IP address:
+
+**Windows:**
+```bash
+ipconfig
+```
+Look for "IPv4 Address" under your active network adapter (e.g., `192.168.1.100`)
+
+**macOS/Linux:**
+```bash
+ifconfig
+```
+Look for `inet` address under your active network interface
+
+Then update the config:
+
+```typescript
+export const API_URL = "http://YOUR_LOCAL_IP:4242";
+// Example: export const API_URL = "http://192.168.1.100:4242";
+```
+
+**Important:** Make sure your mobile device and computer are on the same network!
+
+#### Step 4: Start the Expo app
+
+```bash
+npm start
+```
+
+Or use specific platform commands:
+
+```bash
+# Start for Android
+npm run android
+
+# Start for iOS (macOS only)
+npm run ios
+
+# Start for Web
+npm run web
+```
+
+## Running the Complete Application
+
+1. **Start the backend server first:**
+   ```bash
+   cd server
+   npm start
+   ```
+
+2. **In a new terminal, start the mobile app:**
+   ```bash
+   cd ..
+   npm start
+   ```
+
+3. **Open the app:**
+   - Press `a` for Android emulator
+   - Press `i` for iOS simulator (macOS only)
+   - Scan the QR code with Expo Go app on your physical device
+
+## Configuration Reference
+
+### API URL Configuration (`utils/config.ts`)
+
+This file contains the backend API endpoint. Update it based on your development environment:
+
+| Environment | API_URL Value | Use Case |
+|------------|---------------|----------|
+| Android Emulator | `http://10.0.2.2:4242` | Android emulator's special alias for host |
+| iOS Simulator | `http://localhost:4242` | iOS simulator on same machine |
+| Physical Device | `http://YOUR_IP:4242` | Real device on same WiFi network |
+| Production | `https://your-domain.com` | Deployed backend server |
+
+### Environment Variables (`.env`)
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `STRIPE_PUBLISHABLE_KEY` | Your Stripe publishable key | Yes |
+| `STRIPE_SECRET_KEY` | Your Stripe secret key | Yes |
+| `STRIPE_WEBHOOK_SECRET` | Webhook signing secret | For webhooks |
+| `PORT` | Server port number | No (default: 4242) |
+| `DOMAIN` | Server domain | No |
+
+## Troubleshooting
+
+### Cannot connect to backend from mobile device
+
+1. Verify the backend server is running (`http://localhost:4242` should be accessible in your browser)
+2. Check that `API_URL` in `utils/config.ts` is correct for your environment
+3. Ensure your device and computer are on the same WiFi network (for physical devices)
+4. Check firewall settings - port 4242 should be accessible
+5. Try restarting both the server and Expo app
+
+### Stripe payments not working
+
+1. Verify your Stripe API keys are correct in `.env`
+2. Make sure you're using test mode keys (starting with `pk_test_` and `sk_test_`)
+3. Check that the backend server is running and accessible
+4. Review server logs for any error messages
+
+### App not loading after changes
+
+1. Clear Expo cache: `npx expo start -c`
+2. Reinstall dependencies: `rm -rf node_modules && npm install`
+3. Restart Metro bundler
+
+## Development
+
+- **Mobile app code:** Edit files in the `app` directory (uses file-based routing)
+- **Components:** Located in `components` directory
+- **Backend API:** Server code in `server` directory
+- **Stripe integration:** Check `server/routes/stripe.ts` and `components/payment-form.tsx`
+
+## Features
+
+- Stripe payment processing
+- Store credit management
+- Discount codes
+- Customer session handling
+- Native iOS and Android support
+
+## Learn More
+
+- [Expo documentation](https://docs.expo.dev/)
+- [Stripe React Native SDK](https://docs.stripe.com/payments/accept-a-payment?platform=react-native)
+- [Expo Router](https://docs.expo.dev/router/introduction/)
+
+## Additional Resources
+
+- [Stripe API Reference](BACKEND_API_REFERENCE.md)
+- [Expo GitHub](https://github.com/expo/expo)
+- [Stripe Dashboard](https://dashboard.stripe.com/)
