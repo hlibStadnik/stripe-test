@@ -2,7 +2,6 @@ import { Image } from "expo-image";
 import {
   ActivityIndicator,
   Alert,
-  Button,
   StyleSheet,
   Text,
   View,
@@ -13,8 +12,11 @@ import {
 import ParallaxScrollView from "@/components/parallax-scroll-view";
 import { useState } from "react";
 import { PaymentForm } from "@/components/payment-form";
+import { PickupSummary } from "@/components/pickup-summary";
+import { Stepper } from "@/components/stepper";
 import { useCustomerSession } from "@/hooks/use-customer-session";
 import { useStoreCredit } from "@/hooks/use-store-credit";
+import { useRouter } from "expo-router";
 
 const moneyAmount = (() => {
   const now = new Date();
@@ -24,115 +26,48 @@ const moneyAmount = (() => {
 })();
 
 export default function HomeScreen() {
+  const router = useRouter();
   const { customerId, customerSessionClientSecret } = useCustomerSession();
   const { storeCredit } = useStoreCredit(customerId);
 
-  // Split payment controls
-  const [enableSplitPayment, setEnableSplitPayment] = useState(false);
-  const [payment1Amount, setPayment1Amount] = useState("");
-  const [payment2Amount, setPayment2Amount] = useState("");
-
   // Payment confirm functions
-  const [payment1Confirm, setPayment1Confirm] = useState<
-    (() => Promise<any>) | null
-  >(null);
-  const [payment2Confirm, setPayment2Confirm] = useState<
-    (() => Promise<any>) | null
-  >(null);
+  const [confirmA, setConfirmA] = useState<(() => Promise<any>) | null>(null);
+
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handlePayment1Change = (value: string) => {
-    setPayment1Amount(value);
-    const amount1 = parseFloat(value);
-    if (!isNaN(amount1) && amount1 >= 0) {
-      const remainingCents = moneyAmount - Math.round(amount1 * 100);
-      const remaining = Math.max(0, remainingCents / 100);
-      setPayment2Amount(remaining.toFixed(2));
-    }
-  };
-
-  const handlePayment2Change = (value: string) => {
-    setPayment2Amount(value);
-    const amount2 = parseFloat(value);
-    if (!isNaN(amount2) && amount2 >= 0) {
-      const remainingCents = moneyAmount - Math.round(amount2 * 100);
-      const remaining = Math.max(0, remainingCents / 100);
-      setPayment1Amount(remaining.toFixed(2));
-    }
-  };
-
-  const getPayment1AmountInCents = () => {
-    const amount = parseFloat(payment1Amount);
-    return !isNaN(amount) && amount > 0 ? Math.round(amount * 100) : 0;
-  };
-
-  const getPayment2AmountInCents = () => {
-    const amount = parseFloat(payment2Amount);
-    return !isNaN(amount) && amount > 0 ? Math.round(amount * 100) : 0;
-  };
-
-  const totalSplit = getPayment1AmountInCents() + getPayment2AmountInCents();
+  const [isStoreCreditApplied, setIsStoreCreditApplied] = useState(false);
+  const [storeCreditInput, setStoreCreditInput] = useState("");
+  const [appliedStoreCredit, setAppliedStoreCredit] = useState(0);
 
   const handlePayAll = async () => {
-    if (!enableSplitPayment) {
-      // Single payment mode
-      if (!payment1Confirm) {
-        Alert.alert("Error", "Payment method not ready");
-        return;
-      }
-
-      setIsProcessing(true);
-
-      try {
-        console.log("Executing Single Payment...");
-        const result = await payment1Confirm();
-        if (result.status === "failed") {
-          throw new Error(`Payment failed: ${result.error.message}`);
-        }
-        console.log("Payment completed:", result.status);
-        Alert.alert("Success", "Payment completed successfully!");
-      } catch (error: any) {
-        console.error("Payment error:", error);
-        Alert.alert("Error", error.message || "Payment failed");
-      } finally {
-        setIsProcessing(false);
-      }
-      return;
-    }
-
-    // Split payment mode
-    if (totalSplit !== moneyAmount) {
-      Alert.alert(
-        "Error",
-        `Split payments must total exactly $${(moneyAmount / 100).toFixed(2)}`
-      );
-      return;
-    }
-
     setIsProcessing(true);
 
     try {
       // Execute payment 1 only if amount > 0
-      if (getPayment1AmountInCents() > 0 && payment1Confirm) {
+      if (moneyAmount > 0 && !!confirmA) {
         console.log("Executing Payment 1...");
-        const result1 = await payment1Confirm();
+        const result1 = await confirmA();
+        console.log("🚀 ~ handlePayAll ~ result1:", result1);
         if (result1.status === "failed") {
           throw new Error(`Payment 1 failed: ${result1.error.message}`);
         }
-        console.log("Payment 1 completed:", result1.status);
-      }
-
-      // Execute payment 2 only if amount > 0
-      if (getPayment2AmountInCents() > 0 && payment2Confirm) {
-        console.log("Executing Payment 2...");
-        const result2 = await payment2Confirm();
-        if (result2.status === "failed") {
-          throw new Error(`Payment 2 failed: ${result2.error.message}`);
+        if (result1.status === "canceled") {
+          console.log("Payment 1 canceled:", result1);
+          return;
         }
-        console.log("Payment 2 completed:", result2.status);
       }
 
-      Alert.alert("Success", "All payments completed successfully!");
+      // Navigate to confirmation screen on success
+      const totalAmount = moneyAmount - appliedStoreCredit;
+      router.push({
+        pathname: "/confirm-payment",
+        params: {
+          amount: totalAmount.toFixed(2),
+          customerName: "Jorge",
+          appointmentDate: "Sep 15, 2025, 4:00 PM",
+          location: "7400 Dean Martin Dr Suite 204\nLas Vegas, NV 89139",
+        },
+      });
     } catch (error: any) {
       console.error("Payment error:", error);
       Alert.alert("Error", error.message || "Payment failed");
@@ -169,12 +104,30 @@ export default function HomeScreen() {
         />
       }
     >
+      {/* Stepper */}
+      <Stepper
+        steps={[
+          { label: "Appointment time", completed: true },
+          { label: "Payment", completed: false },
+        ]}
+        currentStep={1}
+      />
       <View style={styles.headerContainer}>
         <Text style={styles.locationText}>North Las Vegas</Text>
-        <Text style={styles.pickupsText}>Pick Ups 1</Text>
-        <Text style={styles.totalText}>
-          Total ${(moneyAmount / 100).toFixed(2)}
-        </Text>
+        <View
+          style={{
+            flexDirection: "row",
+            flex: 1,
+            justifyContent: "flex-end",
+            flexWrap: "nowrap",
+            alignItems: "center",
+          }}
+        >
+          <Text style={styles.pickupsText}>Pick Ups 1</Text>
+          <Text style={styles.totalText}>
+            Total ${(moneyAmount / 100).toFixed(2)}
+          </Text>
+        </View>
       </View>
 
       {/* Payment Methods Section */}
@@ -185,45 +138,97 @@ export default function HomeScreen() {
         </Text>
       </View>
 
-      {/* Payment Forms */}
-
       <PaymentForm
-        amount={moneyAmount}
+        amount={moneyAmount - appliedStoreCredit}
         customerId={customerId}
         customerSessionClientSecret={customerSessionClientSecret}
-        storeCredit={storeCredit}
-        onConfirmReady={(fn) => setPayment1Confirm(() => fn)}
+        storeCredit={appliedStoreCredit}
+        setConfirmCallback={setConfirmA}
+        total={moneyAmount}
         isProcessingExternal={isProcessing}
-        isSplittingPayment={enableSplitPayment}
       />
 
       <View style={styles.splitToggleContainer}>
-        <Text style={styles.splitLabel}>Split payment</Text>
+        <Text style={styles.splitLabel}>Use Store Credit</Text>
         <Switch
-          value={enableSplitPayment}
-          disabled={true}
-          onValueChange={setEnableSplitPayment}
+          value={isStoreCreditApplied}
+          onValueChange={() => setIsStoreCreditApplied(!isStoreCreditApplied)}
         />
       </View>
-      {enableSplitPayment && (
-        <>
-          <Text>Todo: split with store credit</Text>
+      {isStoreCreditApplied && (
+        <View style={styles.storeCreditInputContainer}>
+          <Text style={styles.inputLabel}>
+            Apply Store Credits (Available: ${(storeCredit / 100).toFixed(2)})
+          </Text>
+          <View style={styles.inputRow}>
+            <Text style={styles.currencySymbol}>$</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="0.00"
+              keyboardType="decimal-pad"
+              value={storeCreditInput}
+              onChangeText={(text) => {
+                setStoreCreditInput(text);
+                const creditAmount = Math.round(parseFloat(text || "0") * 100);
+                const maxCredit = Math.min(storeCredit, moneyAmount);
+                const appliedStoreCredit = Math.min(creditAmount, maxCredit);
 
-          {/* <PaymentForm
-            amount={getPayment2AmountInCents()}
-            customerId={customerId}
-            customerSessionClientSecret={customerSessionClientSecret}
-            onConfirmReady={(fn) => setPayment2Confirm(() => fn)}
-            isProcessingExternal={isProcessing}
-            isSplittingPayment={enableSplitPayment}
-          /> */}
-        </>
+                setAppliedStoreCredit(appliedStoreCredit);
+              }}
+            />
+          </View>
+          {appliedStoreCredit > 0 && (
+            <View style={styles.calculationRow}>
+              <Text style={styles.calculationLabel}>Original Amount:</Text>
+              <Text style={styles.calculationValue}>
+                ${(moneyAmount / 100).toFixed(2)}
+              </Text>
+            </View>
+          )}
+          {appliedStoreCredit > 0 && (
+            <View style={styles.calculationRow}>
+              <Text style={styles.calculationLabel}>Store Credit Applied:</Text>
+              <Text style={[styles.calculationValue, styles.creditApplied]}>
+                -${(appliedStoreCredit / 100).toFixed(2)}
+              </Text>
+            </View>
+          )}
+          {appliedStoreCredit > 0 && (
+            <View style={[styles.calculationRow, styles.totalRow]}>
+              <Text style={styles.totalLabel}>Amount to Charge:</Text>
+              <Text style={styles.totalValue}>
+                $
+                {Math.max(0, (moneyAmount - appliedStoreCredit) / 100).toFixed(
+                  2
+                )}
+              </Text>
+            </View>
+          )}
+        </View>
       )}
 
-      <View style={styles.payButtonContainer}>
-        <Button title={`Pay`} onPress={handlePayAll} disabled={isProcessing} />
-        {isProcessing && <ActivityIndicator size="large" />}
-      </View>
+      <PickupSummary
+        items={[
+          {
+            id: "1",
+            name: "1 Weber 15301001 Performer",
+            description: "Charcoal Grill, 22-Inch, Black",
+          },
+        ]}
+        pickupDate="Wed Jul 23, 3:30 PM"
+        location={{
+          address: "4031 Market Center Dr Suite 303",
+          city: "North Las Vegas",
+          state: "NV",
+          zip: "8903",
+        }}
+        subtotal={moneyAmount}
+        buyerPremium={0}
+        tax={0}
+        onPay={handlePayAll}
+        isProcessing={isProcessing}
+        onChangeDate={() => console.log("Change date")}
+      />
     </ParallaxScrollView>
   );
 }
@@ -240,8 +245,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 16,
-    backgroundColor: "#f5f5f5",
+    padding: 10,
     borderTopWidth: 2,
     borderBottomWidth: 2,
     borderColor: "#666",
@@ -282,16 +286,88 @@ const styles = StyleSheet.create({
   },
   splitToggleContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
-    padding: 16,
+    // padding: 16,
   },
   splitLabel: {
     fontSize: 16,
     fontWeight: "600",
   },
-  payButtonContainer: {
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+    color: "#333",
+  },
+  input: {
+    borderColor: "#ccc",
+    borderRadius: 4,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: "#fff",
+    width: "auto",
+  },
+  storeCreditInputContainer: {
     marginTop: 16,
-    marginBottom: 24,
+    padding: 16,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d0d0d0",
+    paddingHorizontal: 12,
+  },
+  currencySymbol: {
+    fontSize: 18,
+    color: "#333",
+    marginRight: 4,
+    fontWeight: "600",
+  },
+
+  calculationRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingTop: 8,
+  },
+  calculationLabel: {
+    fontSize: 14,
+    color: "#666",
+  },
+  calculationValue: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "500",
+  },
+  creditApplied: {
+    color: "#e53935",
+  },
+  totalRow: {
+    borderTopWidth: 1,
+    borderTopColor: "#d0d0d0",
+    paddingTop: 12,
+  },
+  totalLabel: {
+    fontSize: 16,
+    color: "#000",
+    fontWeight: "700",
+  },
+  totalValue: {
+    fontSize: 16,
+    color: "#4285f4",
+    fontWeight: "700",
+  },
+  tempButtonContainer: {
+    marginTop: 20,
+    marginBottom: 20,
   },
 });

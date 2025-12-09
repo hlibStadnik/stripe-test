@@ -1,35 +1,25 @@
-import {
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  Image,
-} from "react-native";
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";
 
+import { createPaymentIntent } from "@/utils/stripe";
 import {
-  IntentConfiguration,
   EmbeddedPaymentElementConfiguration,
+  IntentConfiguration,
   IntentCreationCallbackParams,
   IntentCreationError,
-  useEmbeddedPaymentElement,
   RowStyle,
-  BillingDetails,
-  CustomPaymentMethod,
-  CustomPaymentMethodResult,
+  useEmbeddedPaymentElement,
 } from "@stripe/stripe-react-native";
-import { useState, useCallback, useEffect } from "react";
-import { API_URL } from "@/utils/config";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface PaymentFormProps {
   amount: number;
   customerId: string;
+  otherPaymentType?: string;
   customerSessionClientSecret: string;
   storeCredit?: number;
-  onConfirmReady?: (confirmFn: () => Promise<any>) => void;
+  setConfirmCallback?: (confirmFn: any) => void;
   isProcessingExternal?: boolean;
-  isSplittingPayment?: boolean;
+  total?: number;
 }
 
 export function PaymentForm({
@@ -37,14 +27,10 @@ export function PaymentForm({
   customerId,
   customerSessionClientSecret,
   storeCredit = 0,
-  onConfirmReady,
+  setConfirmCallback,
   isProcessingExternal = false,
-  isSplittingPayment = false,
+  total = 0,
 }: PaymentFormProps) {
-  const [selectedMethod, setSelectedMethod] = useState<string>("card");
-  const [appliedCredit, setAppliedCredit] = useState(0);
-  const [finalAmount, setFinalAmount] = useState(amount);
-
   const [elementConfig, setElementConfig] =
     useState<EmbeddedPaymentElementConfiguration | null>({
       merchantDisplayName: "Nellis Auction",
@@ -80,18 +66,14 @@ export function PaymentForm({
           },
         },
       },
-      googlePay: isSplittingPayment
-        ? undefined
-        : {
-            testEnv: true,
-            merchantCountryCode: "US",
-            currencyCode: "USD",
-          },
-      applePay: isSplittingPayment
-        ? undefined
-        : {
-            merchantCountryCode: "US",
-          },
+      googlePay: {
+        testEnv: true,
+        merchantCountryCode: "US",
+        currencyCode: "USD",
+      },
+      applePay: {
+        merchantCountryCode: "US",
+      },
     });
 
   const handleConfirm = useCallback(
@@ -101,35 +83,23 @@ export function PaymentForm({
       intentCreationCallback: (params: IntentCreationCallbackParams) => void
     ) => {
       try {
-        const response = await fetch(`${API_URL}/create-intent`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            confirmation_token_id: confirmationToken.id,
-            amount: finalAmount,
-            currency: "usd",
-            setup_future_usage: shouldSavePaymentMethod
-              ? "off_session"
-              : undefined,
-            store_credit_applied: appliedCredit,
-          }),
+        const data = await createPaymentIntent({
+          paymentMethodId: confirmationToken.id,
+          amount,
+          currency: "usd",
+          setup_future_usage: shouldSavePaymentMethod
+            ? "off_session"
+            : undefined,
+          storeCreditApplied: storeCredit,
+          total,
         });
-
-        if (!response.ok) {
-          const errorData = await response.text();
-          throw new Error(`Server error: ${response.status}`);
-        }
-
-        const data = await response.json();
 
         if (data.paidWithStoreCredit) {
           Alert.alert(
             "Success",
-            `Payment completed with store credit! $${(
-              appliedCredit / 100
-            ).toFixed(2)} used.`
+            `Payment completed with store credit! $${(amount / 100).toFixed(
+              2
+            )} used.`
           );
           clearPaymentOption();
           return;
@@ -152,33 +122,44 @@ export function PaymentForm({
         });
       }
     },
-    [finalAmount, appliedCredit]
+    [amount, storeCredit]
   );
-  const [intentConfig, setIntentConfig] = useState<IntentConfiguration | null>({
-    confirmHandler: handleConfirm,
-    mode: { amount: finalAmount, currencyCode: "USD" },
-  });
+
+  const intentConfig = useMemo(
+    () => ({
+      confirmHandler: handleConfirm,
+      mode: { amount: amount, currencyCode: "USD" },
+    }),
+    [handleConfirm]
+  );
 
   const {
     embeddedPaymentElementView,
-    paymentOption,
     confirm,
     loadingError,
     clearPaymentOption,
+    update,
   } = useEmbeddedPaymentElement(
     intentConfig as IntentConfiguration,
     elementConfig as EmbeddedPaymentElementConfiguration
   );
 
   useEffect(() => {
-    if (onConfirmReady && confirm) {
-      // Wrap confirm to ensure it's called correctly
-      const confirmWrapper = async () => {
-        return await confirm();
-      };
-      onConfirmReady(confirmWrapper);
+    if (storeCredit <= 0) {
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const newAmount = amount - storeCredit;
+    if (newAmount > 0) {
+      console.log("🚀 ~ StripeWrapper ~ newAmount:", newAmount);
+      update({
+        confirmHandler: handleConfirm,
+        mode: { amount: newAmount, currencyCode: "USD" },
+      });
+    }
+  }, [amount, handleConfirm, update, storeCredit]);
+
+  useEffect(() => {
+    setConfirmCallback?.(() => confirm);
   }, [confirm]);
 
   if (!intentConfig || !elementConfig) {
@@ -209,34 +190,6 @@ export function PaymentForm({
         )}
       </View>
 
-      {/* Custom Store Credit Option */}
-      {storeCredit > 0 && (
-        <TouchableOpacity
-          style={[
-            selectedMethod === "storecredit" && styles.methodCardSelected,
-            {
-              paddingVertical: 25,
-            },
-          ]}
-          onPress={() => clearPaymentOption()}
-          //   onPress={() => setSelectedMethod("storecredit")}
-        >
-          <View style={styles.methodRow}>
-            <View style={styles.radioOuter}>
-              {selectedMethod === "storecredit" && (
-                <View style={styles.radioInner} />
-              )}
-            </View>
-            <Image
-              source={require("@/assets/images/credit.png")}
-              resizeMode="contain"
-              style={{ width: 20, height: 20, marginRight: 8, marginLeft: 4 }}
-            />
-            <Text style={styles.methodLabel}>Store credit</Text>
-          </View>
-        </TouchableOpacity>
-      )}
-
       {isProcessingExternal && <ActivityIndicator size="large" />}
     </View>
   );
@@ -244,57 +197,7 @@ export function PaymentForm({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
-  },
-  methodCard: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    paddingVertical: 25,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#e0e0e0",
-    marginTop: 12,
-  },
-  methodCardSelected: {
-    borderColor: "#4285f4",
-  },
-  methodRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  radioOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#666",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  radioInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#4285f4",
-  },
-  methodLabel: {
-    fontSize: 16,
-    color: "#000",
-  },
-  storeCreditBadge: {
-    backgroundColor: "#e53935",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  storeCreditText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "bold",
+    // marginBottom: 24,
   },
   errorText: {
     color: "red",
