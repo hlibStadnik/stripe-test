@@ -151,10 +151,14 @@ export function PaymentForm({
     const newAmount = amount - storeCredit;
     if (newAmount > 0) {
       console.log("🚀 ~ StripeWrapper ~ newAmount:", newAmount);
-      update({
-        confirmHandler: handleConfirm,
-        mode: { amount: newAmount, currencyCode: "USD" },
-      });
+      try {
+        update({
+          confirmHandler: handleConfirm,
+          mode: { amount: newAmount, currencyCode: "USD" },
+        });
+      } catch (error) {
+        console.error("Error updating payment intent:", error);
+      }
     }
   }, [amount, handleConfirm, update, storeCredit]);
 
