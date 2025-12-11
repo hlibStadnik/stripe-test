@@ -105,30 +105,7 @@ export default function HomeScreen() {
       }
     >
       {/* Stepper */}
-      <Stepper
-        steps={[
-          { label: "Appointment time", completed: true },
-          { label: "Payment", completed: false },
-        ]}
-        currentStep={1}
-      />
-      <View style={styles.headerContainer}>
-        <Text style={styles.locationText}>North Las Vegas</Text>
-        <View
-          style={{
-            flexDirection: "row",
-            flex: 1,
-            justifyContent: "flex-end",
-            flexWrap: "nowrap",
-            alignItems: "center",
-          }}
-        >
-          <Text style={styles.pickupsText}>Pick Ups 1</Text>
-          <Text style={styles.totalText}>
-            Total ${(moneyAmount / 100).toFixed(2)}
-          </Text>
-        </View>
-      </View>
+      
 
       {/* Payment Methods Section */}
       <View style={styles.paymentMethodsContainer}>
@@ -177,58 +154,11 @@ export default function HomeScreen() {
               }}
             />
           </View>
-          {appliedStoreCredit > 0 && (
-            <View style={styles.calculationRow}>
-              <Text style={styles.calculationLabel}>Original Amount:</Text>
-              <Text style={styles.calculationValue}>
-                ${(moneyAmount / 100).toFixed(2)}
-              </Text>
-            </View>
-          )}
-          {appliedStoreCredit > 0 && (
-            <View style={styles.calculationRow}>
-              <Text style={styles.calculationLabel}>Store Credit Applied:</Text>
-              <Text style={[styles.calculationValue, styles.creditApplied]}>
-                -${(appliedStoreCredit / 100).toFixed(2)}
-              </Text>
-            </View>
-          )}
-          {appliedStoreCredit > 0 && (
-            <View style={[styles.calculationRow, styles.totalRow]}>
-              <Text style={styles.totalLabel}>Amount to Charge:</Text>
-              <Text style={styles.totalValue}>
-                $
-                {Math.max(0, (moneyAmount - appliedStoreCredit) / 100).toFixed(
-                  2
-                )}
-              </Text>
-            </View>
-          )}
+         
         </View>
       )}
 
-      <PickupSummary
-        items={[
-          {
-            id: "1",
-            name: "1 Weber 15301001 Performer",
-            description: "Charcoal Grill, 22-Inch, Black",
-          },
-        ]}
-        pickupDate="Wed Jul 23, 3:30 PM"
-        location={{
-          address: "4031 Market Center Dr Suite 303",
-          city: "North Las Vegas",
-          state: "NV",
-          zip: "8903",
-        }}
-        subtotal={moneyAmount}
-        buyerPremium={0}
-        tax={0}
-        onPay={handlePayAll}
-        isProcessing={isProcessing}
-        onChangeDate={() => console.log("Change date")}
-      />
+      
     </ParallaxScrollView>
   );
 }

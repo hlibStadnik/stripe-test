@@ -139,28 +139,36 @@ export function PaymentForm({
     loadingError,
     clearPaymentOption,
     update,
+    isLoaded,
+    paymentOption
   } = useEmbeddedPaymentElement(
     intentConfig as IntentConfiguration,
     elementConfig as EmbeddedPaymentElementConfiguration
   );
 
+  
+
   useEffect(() => {
-    if (storeCredit <= 0) {
+    const updatePaymentIntent = async () => {
+
+    if (storeCredit <= 0||loadingError||!update||!isLoaded||amount - storeCredit <=0) {
       return;
     }
     const newAmount = amount - storeCredit;
     if (newAmount > 0) {
       console.log("🚀 ~ StripeWrapper ~ newAmount:", newAmount);
       try {
-        update({
+       await update({
           confirmHandler: handleConfirm,
           mode: { amount: newAmount, currencyCode: "USD" },
         });
       } catch (error) {
-        console.error("Error updating payment intent:", error);
+        console.log("Error updating payment intent:", error);
       }
-    }
-  }, [amount, handleConfirm, update, storeCredit]);
+    }}
+
+    updatePaymentIntent();
+  }, [amount, handleConfirm, update, storeCredit, loadingError, isLoaded]);
 
   useEffect(() => {
     setConfirmCallback?.(() => confirm);
@@ -174,35 +182,41 @@ export function PaymentForm({
     );
   }
 
+
+  console.log('isLoaded ', isLoaded);
+
+  console.log('loadingError ', loadingError);
+
   return (
-    <View style={styles.container}>
-      {/* Stripe Payment Element with custom styling */}
+    <View >
       <View>
         {loadingError && (
           <View>
             <Text style={styles.errorText}>
-              Failed to load payment form:{" "}
+              Failed to load payment form:
               {loadingError.message || String(loadingError)}
             </Text>
           </View>
         )}
-        <View>{embeddedPaymentElementView}</View>
-        {loadingError && (
+        <View style={{ opacity: isLoaded ? 1 : 0, 
+          height: 300, 
+          alignItems: "center", 
+          justifyContent: "center" }}>
+            {embeddedPaymentElementView}
+            </View>
+        {!isLoaded && (
           <View style={{ paddingVertical: 16, alignItems: "center" }}>
             <ActivityIndicator />
           </View>
         )}
       </View>
-
+        <Text>Selected Payment Method: {paymentOption ? paymentOption.label : 'None'}</Text>
       {isProcessingExternal && <ActivityIndicator size="large" />}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    // marginBottom: 24,
-  },
   errorText: {
     color: "red",
     marginBottom: 8,
