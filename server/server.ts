@@ -17,9 +17,7 @@ app.use(express.static(process.env.STATIC_DIR));
 app.use(cors({ origin: true }));
 app.use(json()); // Parse JSON request bodies
 
-// const asyncMiddleware = fn => (req, res, next) => {
-//   Promise.resolve(fn(req, res, next)).catch(next);
-// };
+const PORT = process.env.PORT || 4242
 
 app.use(stripeRouter);
 
@@ -52,6 +50,6 @@ function errorHandler(
 
 app.use(errorHandler);
 
-app.listen(4242, () =>
-  console.log(`Node server listening on port http://localhost:${4242}`)
+app.listen(PORT, () =>
+  console.log(`Node server listening on port http://localhost:${PORT}`)
 );

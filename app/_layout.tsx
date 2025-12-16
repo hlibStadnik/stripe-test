@@ -1,23 +1,13 @@
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
-import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { Text } from "react-native";
 import "react-native-reanimated";
 
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { fetchPublishableKey } from "@/utils/stripeApi";
 import { StripeProvider } from "@stripe/stripe-react-native";
-import { fetchPublishableKey } from "@/utils/stripe";
+import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
 
-export const unstable_settings = {
-  anchor: "(tabs)",
-};
-
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [publishableKey, setPublishableKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -29,32 +19,17 @@ export default function RootLayout() {
   }, []);
 
   if (!publishableKey) {
-    return null; // or a loading screen
+    return <Text>Loading publishableKey...</Text>;
   }
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <StripeProvider
-        publishableKey={publishableKey}
-        merchantIdentifier="merchant.identifier" // required for Apple Pay
-        urlScheme="your-url-scheme" // required for 3D Secure and bank redirects
-      >
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="modal"
-            options={{ presentation: "modal", title: "Modal" }}
-          />
-          <Stack.Screen
-            name="confirm-payment"
-            options={{
-              title: "Payment Confirmation",
-              headerBackTitle: "Back",
-            }}
-          />
-        </Stack>
-        <StatusBar style="auto" />
-      </StripeProvider>
-    </ThemeProvider>
+    <StripeProvider
+      publishableKey={publishableKey}
+      merchantIdentifier="merchant.identifier"
+      urlScheme="your-url-scheme"
+    >
+      <Stack screenOptions={{ headerShown: false }} />
+      <StatusBar style="auto" />
+    </StripeProvider>
   );
 }

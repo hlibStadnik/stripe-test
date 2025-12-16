@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { createCustomerSession } from "@/utils/stripe";
+import { createCustomerSession } from "@/utils/stripeApi";
+import { useEffect, useState } from "react";
 
 export function useCustomerSession() {
   const [customerId, setCustomerId] = useState<string | null>(null);

@@ -1,9 +1,7 @@
 import { Alert } from "react-native";
-import { API_URL } from "@/utils/config";
+import { API_URL } from "@/config";
 
-export async function fetchPublishableKey(
-  paymentMethod?: string
-): Promise<string | null> {
+export async function fetchPublishableKey(): Promise<string | null> {
   try {
     const response = await fetch(`${API_URL}/config`);
 
@@ -45,74 +43,6 @@ export async function createCustomerSession(): Promise<CustomerSession | null> {
     Alert.alert(
       "Error",
       "Unable to create customer session. Is your server running?"
-    );
-    return null;
-  }
-}
-
-export interface EphemeralKeyResponse {
-  ephemeralKey: string;
-}
-
-export async function createEphemeralKey(
-  customerId: string
-): Promise<EphemeralKeyResponse | null> {
-  try {
-    const response = await fetch(`${API_URL}/create-ephemeral-key`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        customerId: customerId,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to create ephemeral key");
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (e) {
-    console.warn("Unable to create ephemeral key. Is your server running?");
-    Alert.alert(
-      "Error",
-      "Unable to create ephemeral key. Is your server running?"
-    );
-    return null;
-  }
-}
-
-export interface SetupIntentResponse {
-  clientSecret: string;
-}
-
-export async function createSetupIntent(
-  customerId: string
-): Promise<SetupIntentResponse | null> {
-  try {
-    const response = await fetch(`${API_URL}/create-setup-intent`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        customerId: customerId,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to create setup intent");
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (e) {
-    console.warn("Unable to create setup intent. Is your server running?");
-    Alert.alert(
-      "Error",
-      "Unable to create setup intent. Is your server running?"
     );
     return null;
   }
