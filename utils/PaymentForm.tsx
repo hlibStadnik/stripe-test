@@ -1,15 +1,20 @@
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Button,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-import { createPaymentIntent } from "@/utils/stripe";
+import { createPaymentIntent } from "@/utils/stripeApi";
 import {
   EmbeddedPaymentElementConfiguration,
   IntentConfiguration,
   IntentCreationCallbackParams,
   IntentCreationError,
-  RowStyle,
   useEmbeddedPaymentElement,
 } from "@stripe/stripe-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 interface PaymentFormProps {
   amount: number;
@@ -17,8 +22,6 @@ interface PaymentFormProps {
   otherPaymentType?: string;
   customerSessionClientSecret: string;
   storeCredit?: number;
-  setConfirmCallback?: (confirmFn: any) => void;
-  isProcessingExternal?: boolean;
   total?: number;
 }
 
@@ -27,45 +30,13 @@ export function PaymentForm({
   customerId,
   customerSessionClientSecret,
   storeCredit = 0,
-  setConfirmCallback,
-  isProcessingExternal = false,
   total = 0,
 }: PaymentFormProps) {
-  const [elementConfig, setElementConfig] =
-    useState<EmbeddedPaymentElementConfiguration | null>({
-      merchantDisplayName: "Nellis Auction",
+  const elementConfig = useMemo<EmbeddedPaymentElementConfiguration | null>(
+    () => ({
+      merchantDisplayName: "Demo App",
       customerId: customerId,
       customerSessionClientSecret: customerSessionClientSecret,
-      returnURL: "com.nellis.stripe://stripe-redirect",
-      appearance: {
-        embeddedPaymentElement: {
-          row: {
-            style: RowStyle.FlatWithRadio,
-            additionalInsets: 10,
-            flat: {
-              separatorThickness: 0,
-              topSeparatorEnabled: false,
-            },
-            floating: {
-              spacing: 32,
-            },
-          },
-        },
-        shapes: {
-          borderRadius: 12,
-          borderWidth: 2,
-        },
-        primaryButton: {
-          shapes: {
-            borderRadius: 18,
-          },
-          colors: {
-            // background: "#f00",
-            text: "#ffffff",
-            border: "#4285f4",
-          },
-        },
-      },
       googlePay: {
         testEnv: true,
         merchantCountryCode: "US",
@@ -74,7 +45,9 @@ export function PaymentForm({
       applePay: {
         merchantCountryCode: "US",
       },
-    });
+    }),
+    [customerId, customerSessionClientSecret]
+  );
 
   const handleConfirm = useCallback(
     async (
@@ -93,17 +66,6 @@ export function PaymentForm({
           storeCreditApplied: storeCredit,
           total,
         });
-
-        if (data.paidWithStoreCredit) {
-          Alert.alert(
-            "Success",
-            `Payment completed with store credit! $${(amount / 100).toFixed(
-              2
-            )} used.`
-          );
-          clearPaymentOption();
-          return;
-        }
 
         if (!data.clientSecret) {
           throw new Error("No client secret returned from server");
@@ -140,39 +102,39 @@ export function PaymentForm({
     clearPaymentOption,
     update,
     isLoaded,
-    paymentOption
+    paymentOption,
   } = useEmbeddedPaymentElement(
     intentConfig as IntentConfiguration,
     elementConfig as EmbeddedPaymentElementConfiguration
   );
 
-  
-
   useEffect(() => {
     const updatePaymentIntent = async () => {
-
-    if (storeCredit <= 0||loadingError||!update||!isLoaded||amount - storeCredit <=0) {
-      return;
-    }
-    const newAmount = amount - storeCredit;
-    if (newAmount > 0) {
-      console.log("🚀 ~ StripeWrapper ~ newAmount:", newAmount);
-      try {
-       await update({
-          confirmHandler: handleConfirm,
-          mode: { amount: newAmount, currencyCode: "USD" },
-        });
-      } catch (error) {
-        console.log("Error updating payment intent:", error);
+      if (
+        storeCredit <= 0 ||
+        loadingError ||
+        !update ||
+        !isLoaded ||
+        amount - storeCredit <= 0
+      ) {
+        return;
       }
-    }}
+      const newAmount = amount - storeCredit;
+      if (newAmount > 0) {
+        console.log("🚀 ~ StripeWrapper ~ newAmount:", newAmount);
+        try {
+          await update({
+            confirmHandler: handleConfirm,
+            mode: { amount: newAmount, currencyCode: "USD" },
+          });
+        } catch (error) {
+          console.log("Error updating payment intent:", error);
+        }
+      }
+    };
 
     updatePaymentIntent();
   }, [amount, handleConfirm, update, storeCredit, loadingError, isLoaded]);
-
-  useEffect(() => {
-    setConfirmCallback?.(() => confirm);
-  }, [confirm]);
 
   if (!intentConfig || !elementConfig) {
     return (
@@ -182,13 +144,12 @@ export function PaymentForm({
     );
   }
 
+  console.log("isLoaded ", isLoaded);
 
-  console.log('isLoaded ', isLoaded);
-
-  console.log('loadingError ', loadingError);
+  console.log("loadingError ", loadingError);
 
   return (
-    <View >
+    <View>
       <View>
         {loadingError && (
           <View>
@@ -198,20 +159,53 @@ export function PaymentForm({
             </Text>
           </View>
         )}
-        <View style={{ opacity: isLoaded ? 1 : 0, 
-          height: 300, 
-          alignItems: "center", 
-          justifyContent: "center" }}>
-            {embeddedPaymentElementView}
-            </View>
+        <View
+          style={{
+            opacity: isLoaded ? 1 : 0,
+            minHeight: 300,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {embeddedPaymentElementView}
+        </View>
         {!isLoaded && (
           <View style={{ paddingVertical: 16, alignItems: "center" }}>
             <ActivityIndicator />
           </View>
         )}
       </View>
-        <Text>Selected Payment Method: {paymentOption ? paymentOption.label : 'None'}</Text>
-      {isProcessingExternal && <ActivityIndicator size="large" />}
+      <Text style={{ marginVertical: 8 }}>
+        Selected Payment Method: {paymentOption ? paymentOption.label : "None"}
+      </Text>
+      <Button
+        title="Confirm Payment"
+        onPress={async () => {
+          try {
+            const result = await confirm();
+
+            switch (result.status) {
+              case "completed":
+                // Payment completed - show a confirmation screen.
+                console.log("Success", "Payment was completed successfully!");
+                break;
+              case "failed":
+                // Encountered an unrecoverable error. You can display the error to the user, log it, and so on.
+                console.log("Error", `Payment failed: ${result.error.message}`);
+                break;
+              case "canceled":
+                // Customer canceled - you should probably do nothing.
+                console.log("Payment was canceled by the user");
+                break;
+            }
+            clearPaymentOption();
+          } catch (error) {
+            clearPaymentOption();
+            // Handle any unexpected errors
+            console.error("Unexpected error during confirmation:", error);
+          }
+        }}
+      />
     </View>
   );
 }
