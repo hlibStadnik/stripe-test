@@ -14,7 +14,7 @@ import {
   IntentCreationError,
   useEmbeddedPaymentElement,
 } from "@stripe/stripe-react-native";
-import { useCallback, useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 interface PaymentFormProps {
   amount: number;
@@ -49,50 +49,47 @@ export function PaymentForm({
     [customerId, customerSessionClientSecret]
   );
 
-  const handleConfirm = useCallback(
-    async (
-      confirmationToken: any,
-      shouldSavePaymentMethod: boolean,
-      intentCreationCallback: (params: IntentCreationCallbackParams) => void
-    ) => {
-      try {
-        const data = await createPaymentIntent({
-          paymentMethodId: confirmationToken.id,
-          amount,
-          currency: "usd",
-          setup_future_usage: shouldSavePaymentMethod
-            ? "off_session"
-            : undefined,
-          storeCreditApplied: storeCredit,
-          total,
-        });
-
-        if (!data.clientSecret) {
-          throw new Error("No client secret returned from server");
-        }
-
-        console.log(`Calling callback with clientSecret`);
-        intentCreationCallback({ clientSecret: data.clientSecret });
-      } catch (error: any) {
-        console.error(`Error in handleConfirm:`, error);
-        intentCreationCallback({
-          error: {
-            code: "Failed",
-            message: error.message || "Unknown error occurred",
-            localizedMessage: error.message || "Unknown error occurred",
-          } as IntentCreationError,
-        });
-      }
-    },
-    [amount, storeCredit]
-  );
-
   const intentConfig = useMemo(
     () => ({
-      confirmHandler: handleConfirm,
+      confirmHandler: async (
+        confirmationToken: any,
+        shouldSavePaymentMethod: boolean,
+        intentCreationCallback: (params: IntentCreationCallbackParams) => void
+      ) => {
+        try {
+          const newAmount = amount - storeCredit;
+          const data = await createPaymentIntent({
+            paymentMethodId: confirmationToken.id,
+            amount: newAmount,
+            currency: "usd",
+            setup_future_usage: shouldSavePaymentMethod
+              ? "off_session"
+              : undefined,
+            storeCreditApplied: storeCredit,
+            total: amount,
+            isUpdated: !!storeCredit,
+          });
+
+          if (!data.clientSecret) {
+            throw new Error("No client secret returned from server");
+          }
+
+          console.log(`Calling callback with clientSecret`);
+          intentCreationCallback({ clientSecret: data.clientSecret });
+        } catch (error: any) {
+          console.error(`Error in handleConfirm:`, error);
+          intentCreationCallback({
+            error: {
+              code: "Failed",
+              message: error.message || "Unknown error occurred",
+              localizedMessage: error.message || "Unknown error occurred",
+            } as IntentCreationError,
+          });
+        }
+      },
       mode: { amount: amount, currencyCode: "USD" },
     }),
-    [handleConfirm]
+    []
   );
 
   const {
@@ -124,7 +121,7 @@ export function PaymentForm({
         console.log("🚀 ~ StripeWrapper ~ newAmount:", newAmount);
         try {
           await update({
-            confirmHandler: handleConfirm,
+            ...intentConfig,
             mode: { amount: newAmount, currencyCode: "USD" },
           });
         } catch (error) {
@@ -134,7 +131,7 @@ export function PaymentForm({
     };
 
     updatePaymentIntent();
-  }, [amount, handleConfirm, update, storeCredit, loadingError, isLoaded]);
+  }, [amount, update, loadingError, isLoaded, storeCredit, total]);
 
   if (!intentConfig || !elementConfig) {
     return (
