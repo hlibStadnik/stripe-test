@@ -79,11 +79,34 @@ router.post("/payment-sheet", async (req, res) => {
     });
 
     res.json({
-      customerSessionClientSecret: customerSession.client_secret,
+      paymentIntent: customerSession.client_secret,
       customer: customer_id,
     });
   } catch (error: any) {
     res.status(400).json({ error: { message: error.message } });
+  }
+});
+
+router.post("/payment-intent-for-payment-sheet", async (req, res) => {
+  console.log("payment-intent-for-payment-sheet");
+  console.log(req.body);
+
+  try {
+    const paymentIntent = await stripeSdk.paymentIntents.create({
+      amount: req.body.amount,
+      currency: "usd",
+      // payment_method: req.body.paymentMethodId,
+      customer: customer_id,
+      // payment_method_options: req.body.paymentMethodOptions,
+      metadata: {
+        store_credit_applied: req.body.storeCreditApplied,
+      },
+      automatic_payment_methods: { enabled: true },
+    });
+
+    return res.send({ clientSecret: paymentIntent.client_secret });
+  } catch (e) {
+    return res.send({ error: e });
   }
 });
 
