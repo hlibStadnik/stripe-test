@@ -39,6 +39,9 @@ export default function HomeScreen() {
 
   return (
     <ScrollView style={{ padding: 16 }}>
+      <Text style={{ fontSize: 16, fontWeight: "bold" }}>
+        moneyAmount: {(moneyAmount / 100).toFixed(2)}
+      </Text>
       <PaymentForm
         amount={moneyAmount - appliedStoreCredit}
         customerId={customerId}
